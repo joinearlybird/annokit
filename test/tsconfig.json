@@ -1,0 +1,11 @@
+{
+  // The tests run only on Node (22 or newer), so they get the language
+  // library Node has. src/ keeps ES2020 in ../tsconfig.json: that is the
+  // floor the overlay's code is held to, because it runs in the app.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "ESNext.Disposable"],
+    "types": ["node"]
+  },
+  "include": [".", "../src"]
+}

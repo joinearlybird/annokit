@@ -466,7 +466,7 @@ in your own agent.
 npm ci && npm run check && npm test
 ```
 
-Node 20 or newer. A pull request that changes the package also runs
+Node 22.12 or newer. A pull request that changes the package also runs
 `npm run bump patch` (or `minor`/`major`), and merging it publishes the new
 version. See
 [Development](https://github.com/joinearlybird/annokit/blob/main/docs/development.md)

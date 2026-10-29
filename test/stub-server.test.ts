@@ -17,7 +17,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AnnoKitTransport } from "../src/transport";
 import { checkProtocol, registerSession } from "../src/handshake";

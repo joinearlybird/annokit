@@ -57,7 +57,7 @@
     "build:cjs": "tsc -p tsconfig.build.json --module node16 --moduleResolution node16 --outDir .lib-staging/commonjs --declaration false --declarationMap false && node -e \"require('fs').writeFileSync('.lib-staging/commonjs/package.json','{\\\"type\\\":\\\"commonjs\\\"}\\n')\"",
     "build:esm": "tsc -p tsconfig.build.json --module esnext --outDir .lib-staging/module --declaration false --declarationMap false && node -e \"require('fs').writeFileSync('.lib-staging/module/package.json','{\\\"type\\\":\\\"module\\\"}\\n')\"",
     "build:swap": "node scripts/swap-build.mjs",
-    "check": "tsc --noEmit",
+    "check": "tsc --noEmit && tsc --noEmit -p test",
     "test": "vitest run",
     "test:watch": "vitest",
     "validate:package": "node scripts/validate-package.mjs",
@@ -96,13 +96,13 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^22.20.1",
+    "@types/node": "^26.6.5",
     "@types/react": "~19.2.2",
     "react": "19.2.3",
     "react-native": "0.86.2",
-    "react-native-view-shot": "^5.1.1",
-    "typescript": "~6.0.3",
-    "vitest": "^4.1.10"
+    "react-native-view-shot": "^6.2.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
   },
   "module": "lib/module/index.js",
   "react-native": "lib/module/index.js",

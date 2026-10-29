@@ -1,6 +1,7 @@
 /** Config resolution (src/env.ts): props-first, env fallback, __DEV__ gate. */
 
 import { readFileSync } from "node:fs";
+import { URL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PACKAGE_VERSION, resolveAnnoKitConfig, SUPPORTED_PROTOCOL_VERSION } from "../src/env";
 
