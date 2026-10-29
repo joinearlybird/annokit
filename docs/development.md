@@ -1,10 +1,10 @@
 # Development
 
-Node **20 or newer** to develop — vitest requires `^20 || ^22 || >=24`, and
-CI runs all three. That is stricter than `engines.node` (`>=18`), which is
-the CONSUMER claim: the published JavaScript targets ES2020 and touches no
-Node API, so an app on Node 18 can install and bundle it fine. npm is the
-package manager (pinned in `packageManager`), with a committed
+Node **22.12 or newer** to develop — vitest requires `^22.12 || ^24 || >=26`,
+and CI runs 22, 24 and 26, the supported LTS lines. That is stricter than
+`engines.node` (`>=18`), which is the CONSUMER claim: the published JavaScript
+targets ES2020 and touches no Node API, so an app on Node 18 can install and
+bundle it fine. npm is the package manager (pinned in `packageManager`), with a committed
 `package-lock.json` so a checkout installs what CI installs:
 
 ```bash

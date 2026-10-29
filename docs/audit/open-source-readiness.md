@@ -211,8 +211,8 @@ tag. Two items stay open and are named below rather than quietly ticked.
 
 `ci.yml` is split by what each job proves:
 
-- **check** — `npm ci`, `npm run check`, `npm test`, across Node 20, 22 and
-  24. The matrix floor is vitest's (`^20 || ^22 || >=24`), not the package's;
+- **check** — `npm ci`, `npm run check`, `npm test`, across Node 22, 24 and
+  26. The matrix floor is vitest's (`^22.12 || ^24 || >=26`), not the package's;
   `engines.node >=18` is the looser consumer claim and is deliberately
   different, because the emitted JavaScript targets ES2020 and touches no
   Node API.
