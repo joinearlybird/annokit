@@ -101,7 +101,7 @@
     "react": "19.2.3",
     "react-native": "0.86.2",
     "react-native-view-shot": "^5.1.1",
-    "typescript": "~6.0.3",
+    "typescript": "~7.0.2",
     "vitest": "^4.1.10"
   },
   "module": "lib/module/index.js",
