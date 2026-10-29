@@ -443,7 +443,7 @@ npm run ios            # terminal 3 (or npm run android)
 
 ### In a Namespace devbox
 
-[**annotate-namespace-example**](https://github.com/joinearlybird/annotate-namespace-example)
+[**annokit-namespace-example**](https://github.com/joinearlybird/annokit-namespace-example)
 is a separate template repository. It runs the Expo app on the iOS Simulator
 inside a [Namespace](https://namespace.so) devbox and serves it to your
 browser, with a panel that shows the simulator's screen next to every task
@@ -452,7 +452,7 @@ command `npm ci && npm run devbox`. Then annotate from the browser, and an
 agent on the devbox makes the change.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/joinearlybird/annotate-namespace-example/main/docs/media/panel.png" alt="The devbox panel in a desktop browser: the simulator showing the app with a green Ship it button, beside an agent task marked Needs review with before and after screenshots and its diff, and a team note thread">
+  <img src="https://raw.githubusercontent.com/joinearlybird/annokit-namespace-example/main/docs/media/panel.png" alt="The devbox panel in a desktop browser: the simulator showing the app with a green Ship it button, beside an agent task marked Needs review with before and after screenshots and its diff, and a team note thread">
 </p>
 
 Each example's README covers the details, including known build issues.
