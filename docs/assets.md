@@ -99,7 +99,7 @@ Both use a **local store**: the app's own `assets/` folder. Assets there are
 files in the agent's checkout, so it can open them and `require()` them, and
 a new one hot reloads like any other edit.
 
-| | Package stub (`npm run server`) | `annotate-namespace-example` |
+| | Package stub (`npm run server`) | `annokit-namespace-example` |
 |---|---|---|
 | Lists | the app's `assets/` folder | the same |
 | Adds | files you put in the folder, and images pasted into the app's composer | the same, plus uploads in the web panel; delete there too |
