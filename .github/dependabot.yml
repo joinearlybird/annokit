@@ -1,0 +1,50 @@
+# Dependency updates.
+#
+# This package ships ZERO runtime dependencies on purpose, so everything
+# below is development tooling or the CI actions themselves. That is what
+# makes a weekly cadence and grouped PRs reasonable: nothing here can reach
+# a consumer's app at runtime, and a failed update is a broken build rather
+# than a broken install downstream.
+#
+# Peer dependencies are deliberately NOT managed here. They are declared as
+# ranges the adopter satisfies from their own app, and are resolved through
+# guarded requires with per-function capability checks — bumping a floor is
+# a compatibility decision with a README and an audit entry behind it, not
+# something to accept from an automated PR.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    groups:
+      # One PR for the routine drift, so review effort tracks risk rather
+      # than package count.
+      dev-minor-and-patch:
+        dependency-type: development
+        update-types: ["minor", "patch"]
+    ignore:
+      # react/react-native sit in devDependencies only to typecheck and test
+      # against a known-good pair. Bumping them is a compatibility-matrix
+      # decision, not dependency hygiene.
+      - dependency-name: react
+      - dependency-name: react-native
+      - dependency-name: "@types/react"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        patterns: ["*"]

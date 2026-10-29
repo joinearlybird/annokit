@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    // The dev tsconfig gets fetch/Response/TextDecoder/AbortController from
+    // @types/node, which a consumer's RN app has no reason to install. The
+    // runtime provides them; DOM supplies only the types, and none of them
+    // reach the public surface (checked by scripts/validate-package.mjs).
+    "lib": ["ES2020", "DOM"],
+    "rootDir": "src",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    // Consumers step into real code from a stack trace; the sources are
+    // published anyway (see `files`), so the maps have something to point at.
+    "removeComments": false,
+    "moduleResolution": "bundler"
+  },
+  "include": ["src"],
+  "exclude": ["test", "**/*.test.ts", "**/*.test.tsx"]
+}

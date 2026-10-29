@@ -1,0 +1,117 @@
+# Publish to npm when main has a version npm does not.
+#
+# Merging is the release: a pull request that changes the package runs
+# `npm run bump`, and version.yml refuses one that forgets. On main, this
+# finds that the version is unpublished, re-runs every gate on the merged
+# commit, publishes it, and records it as a GitHub release tagged vX.Y.Z.
+# A push to main whose version is already on npm (docs, tests, CI) publishes
+# nothing, unless it changed the package anyway, which fails loudly instead
+# of shipping code that never reaches anyone.
+#
+# To retry a failed release, re-run the failed jobs of its run.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  # Dry run: the gates on any branch, without publishing.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Releases go out one at a time, in order, and are never cancelled midway.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.version.outputs.release }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          registry-url: "https://registry.npmjs.org"
+
+      - name: is this version unpublished?
+        id: version
+        run: |
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "$name@$version is already on npm"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "$name@$version is unpublished: releasing"
+          fi
+
+      # Two PRs that both bumped to the same version would otherwise leave
+      # the second one's changes merged and never published.
+      - name: shipped changes must come with a new version
+        if: >-
+          github.event_name == 'push' && steps.version.outputs.release == 'false' &&
+          github.event.before != '0000000000000000000000000000000000000000'
+        run: node scripts/version.mjs gate "${{ github.event.before }}"
+
+      # The same gates CI runs, re-run here: a release must never depend on
+      # someone having looked at a green tick on a different commit.
+      - if: steps.version.outputs.release == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          npm ci
+          npm run check
+          npm test
+          npm run build
+          npm run validate:package
+          npm run verify:consumer
+
+      - name: the working tree must be clean
+        if: steps.version.outputs.release == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::the gates modified tracked files"
+            git status --porcelain
+            exit 1
+          fi
+
+  publish:
+    name: publish
+    needs: verify
+    if: >-
+      needs.verify.outputs.release == 'true' &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      # The tag and the GitHub release.
+      contents: write
+      # Trusted Publishing and provenance: npm accepts this workflow's OIDC
+      # token in place of a stored secret. The package's trusted publisher
+      # on npmjs.com names this repository, release.yml and the npm-publish
+      # environment, and refuses any other run.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          registry-url: "https://registry.npmjs.org"
+      - run: npm ci
+      # prepack builds and validates again, so the tarball is this commit's.
+      - run: npm publish --provenance --access public
+      - name: tag and GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: gh release create "v$VERSION" --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes

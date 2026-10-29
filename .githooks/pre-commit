@@ -1,0 +1,33 @@
+#!/bin/sh
+# Refuse to commit example-APP edits alongside anything else.
+#
+# The agent bridge (server/stub-server.mjs, run from an example) writes into the
+# example apps, in the same working tree you commit from. Those edits look
+# exactly like your own work, and a `git add -A` while testing sweeps them
+# into an unrelated commit — which has already happened once in this
+# repository's history.
+#
+# SCOPED TO THE APPS. server/ is the bridge itself: source you change
+# deliberately, and often in the same breath as the README that documents
+# it. Watching the bridge as well flagged exactly
+# that commit and taught the habit of reaching for --no-verify, which is
+# how a guard stops guarding anything.
+#
+# Either commit alone is fine. Override with `git commit --no-verify` when
+# you genuinely mean to change an app and something else together.
+apps='^examples/\(expo\|bare-react-native\)/'
+staged=$(git diff --cached --name-only)
+echo "$staged" | grep -q "$apps" || exit 0
+echo "$staged" | grep -qv "$apps" || exit 0
+
+cat >&2 <<'MSG'
+✗ This commit stages example-app files together with files outside them.
+
+  That is the shape of an accidental commit of agent test edits — the
+  bridge writes into examples/expo while you test it.
+
+  Check what is staged:      git diff --cached --name-only
+  Throw away agent edits:    npm run examples:reset
+  Commit them on purpose:    git commit --no-verify
+MSG
+exit 1

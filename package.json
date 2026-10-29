@@ -1,0 +1,113 @@
+{
+  "name": "@joinearlybird/annokit",
+  "version": "0.1.0",
+  "description": "AnnoKit: a dev-only in-app annotation overlay for React Native and Expo. Tap an element, say what should change, and send it to your AI coding agent or your team.",
+  "keywords": [
+    "annokit",
+    "react-native",
+    "expo",
+    "annotation",
+    "feedback",
+    "overlay",
+    "ai",
+    "ai-agents",
+    "coding-agent",
+    "developer-tools"
+  ],
+  "author": "Earlybird <founders@joinearlybird.com>",
+  "license": "MIT",
+  "private": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joinearlybird/annokit.git"
+  },
+  "homepage": "https://github.com/joinearlybird/annokit#readme",
+  "bugs": {
+    "url": "https://github.com/joinearlybird/annokit/issues",
+    "email": "founders@joinearlybird.com"
+  },
+  "main": "lib/commonjs/index.js",
+  "types": "lib/typescript/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/typescript/index.d.ts",
+      "react-native": "./lib/module/index.js",
+      "import": "./lib/module/index.js",
+      "require": "./lib/commonjs/index.js",
+      "default": "./lib/commonjs/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "annokit": "server/cli.mjs"
+  },
+  "files": [
+    "lib",
+    "src",
+    "server",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "clean": "rm -rf lib .lib-staging lib.previous",
+    "build": "npm run build:stage && npm run build:types && npm run build:cjs && npm run build:esm && npm run build:swap",
+    "build:stage": "rm -rf .lib-staging lib.previous",
+    "build:types": "tsc -p tsconfig.build.json --emitDeclarationOnly --declarationDir .lib-staging/typescript",
+    "build:cjs": "tsc -p tsconfig.build.json --module node16 --moduleResolution node16 --outDir .lib-staging/commonjs --declaration false --declarationMap false && node -e \"require('fs').writeFileSync('.lib-staging/commonjs/package.json','{\\\"type\\\":\\\"commonjs\\\"}\\n')\"",
+    "build:esm": "tsc -p tsconfig.build.json --module esnext --outDir .lib-staging/module --declaration false --declarationMap false && node -e \"require('fs').writeFileSync('.lib-staging/module/package.json','{\\\"type\\\":\\\"module\\\"}\\n')\"",
+    "build:swap": "node scripts/swap-build.mjs",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "validate:package": "node scripts/validate-package.mjs",
+    "verify:consumer": "node scripts/verify-consumer.mjs",
+    "verify:starter": "node scripts/verify-starter.mjs",
+    "examples:reset": "git checkout -- examples/expo examples/bare-react-native && git clean -fd examples/expo examples/bare-react-native",
+    "examples:local": "node scripts/examples-local.mjs",
+    "prepack": "npm run build && npm run validate:package",
+    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true; [ -f lib/module/index.js ] || npm run build",
+    "bump": "node scripts/version.mjs bump"
+  },
+  "peerDependencies": {
+    "expo-paste-input": "*",
+    "expo-router": "*",
+    "expo-sensors": "*",
+    "react": ">=18.0.0",
+    "react-native": ">=0.69.0",
+    "react-native-svg": "*",
+    "react-native-view-shot": "*"
+  },
+  "peerDependenciesMeta": {
+    "expo-paste-input": {
+      "optional": true
+    },
+    "expo-router": {
+      "optional": true
+    },
+    "expo-sensors": {
+      "optional": true
+    },
+    "react-native-svg": {
+      "optional": true
+    },
+    "react-native-view-shot": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "@types/react": "~19.2.2",
+    "react": "19.2.3",
+    "react-native": "0.86.2",
+    "react-native-view-shot": "^5.1.1",
+    "typescript": "~6.0.3",
+    "vitest": "^4.1.10"
+  },
+  "module": "lib/module/index.js",
+  "react-native": "lib/module/index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "packageManager": "npm@11.7.0"
+}

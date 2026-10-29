@@ -1,0 +1,126 @@
+# Everything that must stay true for this package to be publishable.
+#
+# The jobs are split by what they prove, not by what they cost: `check` is
+# the fast inner loop, `package` proves the tarball a consumer would install,
+# and `supply-chain` guards the two properties this package sells — zero
+# runtime dependencies and honest third-party notices.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A second push to the same PR makes the first one's answer irrelevant.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: check & test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor is set by vitest (^20 || ^22 || >=24), not by the package,
+        # which targets ES2020 and touches no Node API. `engines.node` is the
+        # looser CONSUMER claim and is deliberately different.
+        node: ["20", "22", "24"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      # Frozen install: the committed lockfile is the point of committing it.
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+
+  package:
+    name: build & consumer install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # Entry points, format markers, declaration leakage, tarball contents
+      # and size, and README links that would 404 from an install.
+      - run: npm run validate:package
+      # The one that cannot be faked: pack, install into a throwaway project
+      # with none of this repo on the resolution path, typecheck against it.
+      - run: npm run verify:consumer
+      - name: the build must leave the tree clean
+        # A build that writes into tracked files would mean the published
+        # artifact and the repository disagree.
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::build or validation modified tracked files:"
+            git status --porcelain
+            exit 1
+          fi
+
+  supply-chain:
+    name: dependencies & notices
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: no known advisories
+        run: npm audit --audit-level=high
+      - name: zero runtime dependencies
+        # This is the package's central claim — "droppable into any app" —
+        # and it is one careless `npm i` away from being false.
+        run: |
+          node -e '
+            const p = require("./package.json");
+            const deps = Object.keys(p.dependencies ?? {});
+            if (deps.length) {
+              console.error("::error::runtime dependencies added: " + deps.join(", "));
+              process.exit(1);
+            }
+            console.log("✓ no runtime dependencies");
+          '
+      - name: third-party notices are present
+        # The only vendored material is Lucide icon path data (ISC), inlined
+        # into src/icon-set.ts. If that file cites Lucide, LICENSE must too.
+        run: |
+          node -e '
+            const fs = require("fs");
+            const license = fs.readFileSync("LICENSE", "utf8");
+            const usesLucide = fs.readFileSync("src/icon-set.ts", "utf8").includes("lucide.dev");
+            if (usesLucide && !(license.includes("Lucide") && license.includes("ISC"))) {
+              console.error("::error::src/icon-set.ts carries Lucide paths but LICENSE lost its ISC notice");
+              process.exit(1);
+            }
+            console.log("✓ third-party notices intact");
+          '
+      - name: no credential files committed
+        # Belt and braces beside GitHub secret scanning, which is a repository
+        # SETTING and cannot be enabled from a workflow — see SECURITY notes
+        # in docs/audit/open-source-readiness.md.
+        run: |
+          # Two exemptions, both public by design: the Expo example's
+          # .env.local.example (a localhost endpoint), and the React Native
+          # template's debug.keystore, which every app scaffolded with the
+          # CLI commits — the same key everywhere, password "android".
+          found=$(git ls-files | grep -iE '(^|/)\.env($|\.)|\.(pem|key|p12|keystore)$' \
+            | grep -vxE 'examples/expo/\.env\.local\.example|examples/bare-react-native/android/app/debug\.keystore' || true)
+          if [ -n "$found" ]; then
+            echo "::error::credential-shaped files are tracked:"
+            echo "$found"
+            exit 1
+          fi
+          echo "✓ no credential files tracked"

@@ -1,0 +1,22 @@
+node_modules/
+# package-lock.json IS committed: `npm ci` and Dependabot both need it.
+
+# Credentials. EXPO_PUBLIC_* values are compiled INTO the client bundle and
+# are not secrets (docs/security-and-privacy.md / src/env.ts AUTH NOTE),
+# but the files that carry them routinely carry real ones too, and an
+# endpoint can itself be a capability URL.
+.env
+.env.*
+*.pem
+*.key
+# A sanitised, committed example is the point of the exercise.
+!.env.example
+!.env.local.example
+
+# Editor / OS noise
+.DS_Store
+*.log
+lib/
+*.tgz
+.lib-staging/
+lib.previous/

@@ -1,0 +1,28 @@
+{
+  "name": "annokit",
+  "version": "0.1.0",
+  "description": "The `npx annokit` command for AnnoKit. Runs the @joinearlybird/annokit installed in your app; the package itself is @joinearlybird/annokit.",
+  "keywords": [
+    "annokit",
+    "react-native",
+    "expo"
+  ],
+  "author": "Earlybird <founders@joinearlybird.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joinearlybird/annokit.git",
+    "directory": "shim"
+  },
+  "homepage": "https://github.com/joinearlybird/annokit#readme",
+  "bin": {
+    "annokit": "cli.mjs"
+  },
+  "files": [
+    "cli.mjs",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
