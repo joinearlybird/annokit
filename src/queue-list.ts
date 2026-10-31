@@ -30,7 +30,7 @@
 import type { Comment } from "./comments";
 import { destinationBadge } from "./destination";
 import type { DestinationPalette } from "./destination";
-import { taskOriginLine, taskReopenLabel } from "./message-task";
+import { splitTaskBody, taskOriginLine, taskReopenLabel } from "./message-task";
 import type { SubmitDestination } from "./destination";
 import { WORKING_STATUS, taskProgress } from "./agent-activity";
 import type { ServerAnnotation } from "./types";
@@ -71,9 +71,14 @@ export type QueueFilter = "all" | "agent" | "team";
 
 const NO_TEXT = "(no text)";
 
+/**
+ * The row's line is the request. A task made from a team note carries the
+ * quoted discussion under it (src/message-task.ts); that is the agent's
+ * context, and in a two-line row it would push the lead-in into the title.
+ */
 function annotationText(a: ServerAnnotation): string {
   const value = a.comment ?? a.content ?? a.text;
-  return typeof value === "string" && value.trim() ? value.trim() : NO_TEXT;
+  return typeof value === "string" && value.trim() ? splitTaskBody(value).request : NO_TEXT;
 }
 
 function commentText(c: Comment): string {

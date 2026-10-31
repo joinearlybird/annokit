@@ -87,6 +87,11 @@ describe("the queue's own rows", () => {
     expect(direct.originLabel).toBeUndefined();
     expect(direct.sourceCommentId).toBeUndefined();
   });
+
+  it("shows only the request of a task made from a note, not the discussion under it", () => {
+    const comment = "Remove the reset hint row\n\nFrom the discussion:\n\nDana: The hint row is noise";
+    expect(buildTaskRows([{ ...task("a1"), comment, sourceCommentId: "c1" }])[0].text).toBe("Remove the reset hint row");
+  });
 });
 
 describe("building the mixed list (exported, unrendered)", () => {

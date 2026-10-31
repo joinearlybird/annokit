@@ -18,6 +18,7 @@
  * finished tasks by their status and reply. Pure; read defensively.
  */
 
+import { splitTaskBody } from "./message-task";
 import type { ServerAnnotation } from "./types";
 
 export type RunOutcome = "running" | "done" | "failed" | "stopped";
@@ -172,7 +173,8 @@ export interface DoneRow {
 
 export function doneRow(a: ServerAnnotation): DoneRow {
   const value = a.comment ?? a.content ?? a.text;
-  const text = typeof value === "string" && value.trim() ? value.trim() : "(no change text)";
+  // The request alone, as in the queue: a note's quoted discussion is in the detail.
+  const text = typeof value === "string" && value.trim() ? splitTaskBody(value).request : "(no change text)";
   const runs = readRuns(a.runs);
   const last = runs[runs.length - 1];
   const at = last?.finishedAt ?? last?.startedAt ?? a.updatedAt ?? a.createdAt;
