@@ -150,4 +150,4 @@ export const SUPPORTED_PROTOCOL_VERSION = 1;
  * Kept in step with package.json by the test in test/env.test.ts, which
  * reads both and refuses to let them drift.
  */
-export const PACKAGE_VERSION = "0.1.0";
+export const PACKAGE_VERSION = "0.1.1";

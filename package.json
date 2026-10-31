@@ -1,6 +1,6 @@
 {
   "name": "@joinearlybird/annokit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AnnoKit: a dev-only in-app annotation overlay for React Native and Expo. Tap an element, say what should change, and send it to your AI coding agent or your team.",
   "keywords": [
     "annokit",

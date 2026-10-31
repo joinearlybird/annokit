@@ -98,6 +98,14 @@ describe("a Done row", () => {
       id: "t", text: "x", how: "Resolved", tone: "muted", at: "2026-10-28T09:00:00.000Z",
     });
   });
+
+  it("is only the request of a task made from a note", () => {
+    const comment = "Remove the reset hint row\n\nFrom the discussion:\n\nDana: The hint row is noise";
+    expect(doneRow({ id: "t", comment, status: "resolved" }).text).toBe("Remove the reset hint row");
+    expect(doneRow({ id: "t", comment, status: "sent", runs: [{ ...RUN, title: "Removed the hint row" }] }).request).toBe(
+      "Remove the reset hint row",
+    );
+  });
 });
 
 describe("the agent's title", () => {
