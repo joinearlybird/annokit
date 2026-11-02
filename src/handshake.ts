@@ -31,6 +31,12 @@ export interface HealthResponse {
    * `blockSendWhileWorking`). Optional; absent means "assume it does not".
    */
   queuesTasks?: boolean;
+  /**
+   * The server takes a finished task's change back on
+   * `POST /annotations/:aid/undo`, and puts it back in the queue on
+   * `/redo` (docs/protocol.md, *Undoing a task*). Absent: no Undo button.
+   */
+  undo?: boolean;
 }
 
 /**
@@ -49,9 +55,17 @@ export function negotiatedProtocolVersion(): number | null {
   return negotiated;
 }
 
+/** What /health said about undo; module state for the same reason. */
+let undoSupported = false;
+
+export function serverSupportsUndo(): boolean {
+  return undoSupported;
+}
+
 /** Tests, and anything that swaps servers under us. */
 export function forgetProtocolVersion(): void {
   negotiated = null;
+  undoSupported = false;
 }
 
 /**
@@ -73,11 +87,13 @@ export async function probeProtocol(transport: AnnoKitTransport): Promise<Protoc
   const flavor = detectFlavor(health);
   if (flavor === "agentation") {
     setServerFlavor("agentation");
+    undoSupported = false;
     debugLog("agentation-mcp server detected — compat mode");
     return "ok";
   }
   setServerFlavor("annokit");
   setServerQueuesTasks(health.queuesTasks === true);
+  undoSupported = health.undo === true;
   if (typeof health.protocolVersion === "number") negotiated = health.protocolVersion;
   if (health.protocolVersion !== SUPPORTED_PROTOCOL_VERSION) {
     console.warn(

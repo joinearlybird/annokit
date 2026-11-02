@@ -130,4 +130,13 @@ export interface ServerAnnotation {
    * docs/protocol.md *Run history*). Optional; read with `readRuns`.
    */
   runs?: unknown;
+  /**
+   * UNDO (docs/protocol.md, *Undoing a task*), all server-written and
+   * additive. `undoRequested`: an undo run is waiting or under way.
+   * `undoneAt`: the last undo worked, and no run has done the work again
+   * since. `redoRequestedAt`: when Redo last put the task back in the queue.
+   */
+  undoRequested?: boolean;
+  undoneAt?: string;
+  redoRequestedAt?: string;
 }

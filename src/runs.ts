@@ -50,6 +50,8 @@ export interface TaskRun {
   error?: string;
   /** It continued the agent's own session from the run before, not a fresh start. */
   resumed?: boolean;
+  /** "undo": it took the task's change back rather than making it. Absent: an ordinary run. */
+  kind?: "undo";
 }
 
 const OUTCOMES: readonly RunOutcome[] = ["running", "done", "failed", "stopped"];
@@ -93,6 +95,7 @@ export function readRuns(raw: unknown): TaskRun[] {
       ...(str(o.summary) ? { summary: str(o.summary) } : {}),
       ...(str(o.title, 60) ? { title: str(o.title, 60) } : {}),
       ...(o.resumed === true ? { resumed: true } : {}),
+      ...(o.kind === "undo" ? { kind: "undo" as const } : {}),
       ...(str(o.error) ? { error: str(o.error) } : {}),
     });
   }
@@ -119,6 +122,14 @@ const OUTCOME_WORD: Record<RunOutcome, string> = {
   stopped: "Stopped",
 };
 
+/** The same, for a run that took the change back. */
+const UNDO_WORD: Record<RunOutcome, string> = {
+  running: "Undoing",
+  done: "Undone",
+  failed: "Undo failed",
+  stopped: "Undo stopped",
+};
+
 /**
  * One run, in two lines: who ran it ("Codex · gpt-5.6-terra · high") and
  * how it went ("Done · 2 files · 1m 40s"). The tone colours the second.
@@ -126,8 +137,10 @@ const OUTCOME_WORD: Record<RunOutcome, string> = {
 export function runLines(run: TaskRun): { who: string; how: string; tone: "ok" | "busy" | "bad" | "muted" } {
   const who = [run.agent.label ?? run.agent.id, run.model, run.effort].filter(Boolean).join(" · ");
   const files = run.files?.length ? `${run.files.length} file${run.files.length === 1 ? "" : "s"}` : null;
-  const how = [OUTCOME_WORD[run.outcome], run.resumed ? "continued" : null, files, runDuration(run)].filter(Boolean).join(" · ");
-  const tone = run.outcome === "done" ? "ok" : run.outcome === "running" ? "busy" : run.outcome === "failed" ? "bad" : "muted";
+  const word = (run.kind === "undo" ? UNDO_WORD : OUTCOME_WORD)[run.outcome];
+  const how = [word, run.resumed ? "continued" : null, files, runDuration(run)].filter(Boolean).join(" · ");
+  // An undo that worked is the task's work gone: quiet, not a success to celebrate.
+  const tone = run.outcome === "done" && run.kind === "undo" ? "muted" : run.outcome === "done" ? "ok" : run.outcome === "running" ? "busy" : run.outcome === "failed" ? "bad" : "muted";
   return { who, how, tone };
 }
 
@@ -184,8 +197,8 @@ export function doneRow(a: ServerAnnotation): DoneRow {
   }
   const { who, how, tone } = runLines(last);
   // The newest title any run gave: a failed re-run says nothing new about
-  // what the task became.
-  const title = [...runs].reverse().find((r) => r.title)?.title;
+  // what the task became, and an undo names no change of its own.
+  const title = [...runs].reverse().find((r) => r.title && r.kind !== "undo")?.title;
   return {
     id: a.id,
     text: title ?? text,
@@ -196,4 +209,42 @@ export function doneRow(a: ServerAnnotation): DoneRow {
     ...(runs.length > 1 ? { runCount: runs.length } : {}),
     ...(at ? { at } : {}),
   };
+}
+
+// ── Undo and redo (docs/protocol.md, "Undoing a task") ─────────────────────
+
+/**
+ * The runs an undo would take back: the finished ones since the last undo
+ * that worked. A failed undo took nothing back, so it does not count. The
+ * server decides the same way; this only decides whether to offer it.
+ */
+export function undoableRuns(runs: readonly TaskRun[]): TaskRun[] {
+  let from = 0;
+  runs.forEach((r, i) => {
+    if (r.kind === "undo" && r.outcome === "done") from = i + 1;
+  });
+  return runs.slice(from).filter((r) => r.kind !== "undo" && r.outcome === "done");
+}
+
+/**
+ * THE TOGGLE on a finished task: Undo while its change stands, Redo once it
+ * is undone, and neither for work still in the queue or with the agent.
+ * Null hides it, which is also the answer for a server that cannot undo
+ * (no `undo: true` in /health): a button that only ever fails is worse
+ * than no button.
+ */
+export type UndoAction =
+  | { kind: "undo"; label: "Undo this change"; enabled: true }
+  | { kind: "redo"; label: "Redo: back to the queue"; enabled: true }
+  | { kind: "undoing"; label: "Undoing…"; enabled: false };
+
+export function taskUndoAction(a: ServerAnnotation, supported: boolean): UndoAction | null {
+  if (!supported) return null;
+  if (a.undoRequested === true) return { kind: "undoing", label: "Undoing…", enabled: false };
+  if (!isFinishedTask(a)) return null;
+  if (typeof a.undoneAt === "string" && a.undoneAt) {
+    return { kind: "redo", label: "Redo: back to the queue", enabled: true };
+  }
+  if (undoableRuns(readRuns(a.runs)).length === 0) return null;
+  return { kind: "undo", label: "Undo this change", enabled: true };
 }

@@ -32,7 +32,7 @@ import {
   setCommentStatus,
 } from "../src/comments";
 import { isViewableScreenshot } from "../src/reference-view";
-import type { PendingCapture } from "../src/types";
+import type { PendingCapture, ServerAnnotation } from "../src/types";
 
 const STUB = fileURLToPath(new URL("../server/stub-server.mjs", import.meta.url));
 const SESSION = "stub-test-session";
@@ -377,6 +377,94 @@ describe("the undo line after an agent edits in place", () => {
       server.kill();
       rmSync(repo, { recursive: true, force: true });
     }
+  });
+});
+
+describe("undo and redo", () => {
+  /**
+   * A fake agent that makes the change, or takes it back when the prompt
+   * says UNDO — in a real repository, so the run records the file.
+   */
+  it("undoes a finished task's change, records it, and redoes it from the queue", async () => {
+    const repo = mkdtempSync(join(tmpdir(), "annokit-undo-run-"));
+    const app = join(repo, "app");
+    mkdirSync(app, { recursive: true });
+    writeFileSync(join(app, "label.txt"), "Annotate me\n");
+    const g = (...args: string[]) => execFileSync("git", args, { cwd: repo, encoding: "utf8" });
+    g("init", "-q");
+    const script = join(repo, "agent.mjs");
+    writeFileSync(script, [
+      "import { writeFileSync } from 'node:fs';",
+      "const prompt = process.argv.slice(2).join(' ');",
+      "const undo = prompt.includes('UNDO');",
+      "writeFileSync('label.txt', undo ? 'Annotate me\\n' : 'Ship it\\n');",
+      "console.log(undo ? 'Put the label back.' : 'Changed the label.\\nTitle: Ship it label');",
+    ].join("\n"));
+    g("-c", "user.email=t@t", "-c", "user.name=t", "add", ".");
+    g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init");
+
+    const port = await freePort();
+    const server = spawn(process.execPath, [STUB, "--port", String(port)], {
+      cwd: app,
+      env: { ...process.env, AGENT: "1", AGENT_CMD: `${process.execPath} ${script} {prompt}`, AGENT_DIR: "" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let log = "";
+    server.stdout!.on("data", (c: Buffer) => { log += c.toString(); });
+    const base = `http://127.0.0.1:${port}`;
+    const post = (path: string, body: unknown = {}) =>
+      fetch(`${base}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    type Task = ServerAnnotation & { runs?: { kind?: string; outcome: string; files?: { path: string }[] }[] };
+    const task = async () => (await (await fetch(`${base}/annotations/u1`)).json()) as Task;
+    const until = async (ok: (t: Task) => boolean) => {
+      for (let i = 0; i < 100; i++) {
+        const t = await task();
+        if (ok(t)) return t;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      throw new Error("the run never finished");
+    };
+    try {
+      for (let i = 0; i < 100 && !log.includes("stub —"); i++) await new Promise((r) => setTimeout(r, 50));
+      expect(await (await fetch(`${base}/health`)).json()).toMatchObject({ undo: true });
+      await post(`/sessions/${SESSION}/annotations`, { id: "u1", comment: "Ship it" });
+      // Nothing to undo yet: it has not been run.
+      expect((await post("/annotations/u1/undo")).status).toBe(409);
+      await post("/annotations/send", { annotationIds: ["u1"] });
+      await until((t) => t.status === "sent");
+      expect(readFileSync(join(app, "label.txt"), "utf8")).toBe("Ship it\n");
+      expect((await post("/annotations/u1/redo")).status).toBe(409);
+
+      expect((await post("/annotations/u1/undo")).status).toBe(202);
+      const undone = await until((t) => Boolean(t.undoneAt));
+      expect(readFileSync(join(app, "label.txt"), "utf8")).toBe("Annotate me\n");
+      expect(undone).toMatchObject({ status: "sent" });
+      expect(undone.undoRequested).toBeUndefined();
+      expect(undone.runs?.map((r) => [r.kind ?? "do", r.outcome])).toEqual([["do", "done"], ["undo", "done"]]);
+      expect(undone.thread?.filter((m) => m.role === "user").map((m) => m.content)).toEqual(["Undo this change."]);
+      expect((await post("/annotations/u1/undo")).status).toBe(409);
+
+      // Redo queues it, and sending it does the work again.
+      expect((await post("/annotations/u1/redo")).status).toBe(200);
+      const queued = await task();
+      expect(queued).toMatchObject({ status: "pending" });
+      expect(queued.undoneAt).toBeUndefined();
+      expect(typeof queued.redoRequestedAt).toBe("string");
+      await post("/annotations/send", { annotationIds: ["u1"] });
+      await until((t) => t.status === "sent" && (t.runs?.length ?? 0) === 3);
+      expect(readFileSync(join(app, "label.txt"), "utf8")).toBe("Ship it\n");
+
+      // A client cannot claim the task is undone.
+      await post(`/sessions/${SESSION}/annotations`, { id: "u2", comment: "x", undoneAt: "2026-01-01T00:00:00.000Z" });
+      expect((await (await fetch(`${base}/annotations/u2`)).json()).undoneAt).toBeUndefined();
+    } finally {
+      server.kill();
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("is not offered by a server that runs no agent", async () => {
+    expect(await (await fetch(`${endpoint}/health`)).json()).toMatchObject({ undo: false });
   });
 });
 

@@ -477,6 +477,56 @@ function followUpPrompt(a) {
 }
 
 /**
+ * UNDO (docs/protocol.md, "Undoing a task"). Only in place: in a worktree
+ * the change is a branch, nothing landed in your tree, and deleting the
+ * branch is the undo. Without an agent there is nobody to ask.
+ */
+const UNDO = AGENT_ENABLED && !WORKTREE;
+
+/**
+ * The runs an undo would take back: the finished ones since the last undo
+ * that worked. A failed undo took nothing back, so it does not count.
+ */
+function undoableRuns(a) {
+  const runs = a.runs ?? [];
+  let from = 0;
+  runs.forEach((r, i) => { if (r.kind === "undo" && r.outcome === "done") from = i + 1; });
+  return runs.slice(from).filter((r) => r.kind !== "undo" && r.outcome === "done");
+}
+
+/**
+ * The prompt for taking a task's change back. It names the files the runs
+ * touched, because the agent may be a fresh session that never made the
+ * change, and says to revert only this task's edits: other tasks and the
+ * developer may have changed the same files since, and a `git restore`
+ * would take their work too.
+ */
+function undoPrompt(a) {
+  const files = [...new Set(undoableRuns(a).flatMap((r) => (r.files ?? []).map((f) => f.path)))];
+  const done = undoableRuns(a).map((r) => r.summary).filter(Boolean);
+  return [
+    "A developer asked you to UNDO a change an agent made earlier in this React Native app.",
+    "",
+    `THE REQUEST WAS: ${splitRequest(a.comment)}`,
+    ...(done.length ? ["", "WHAT WAS DONE:", ...done.map((d) => `  ${d}`)] : []),
+    ...(files.length ? ["", "FILES IT CHANGED:", ...files.map((f) => `  ${f}`)] : []),
+    "",
+    "Put those edits back the way they were before the change. Revert only this",
+    "change: keep anything else in those files, which other work may have touched",
+    "since. A file the change created can be deleted if nothing else uses it.",
+    "Metro is watching, so the app reloads by itself.",
+    "Finish with one short sentence saying what you reverted.",
+  ].join("\n");
+}
+
+/** The request alone, without a team note's quoted discussion under it. */
+function splitRequest(comment) {
+  const text = String(comment ?? "(no text)");
+  const at = text.indexOf("\n\nFrom the discussion:\n\n");
+  return (at === -1 ? text : text.slice(0, at)).trim();
+}
+
+/**
  * Continue the agent's own session, or start one that can be continued
  * (agents.mjs, SESSIONS). Only in place: a worktree is removed after its
  * run, and a session belongs to the directory it ran in. Only on the same
@@ -581,7 +631,10 @@ function runAgent(id, done, origin = `http://localhost:${PORT}`) {
   const workDir = wt ? wt.workDir : AGENT_DIR;
   const session = sessionFor(annotation, agent, model, Boolean(wt));
   const resumed = session?.mode === "resume";
-  const prompt = resumed ? followUpPrompt(annotation) : agentPrompt(annotation);
+  // An undo is its own prompt, resumed or not: a resumed session made the
+  // change and knows it best, but it still has to be told to take it back.
+  const undoing = Boolean(annotation.undoRequested);
+  const prompt = undoing ? undoPrompt(annotation) : resumed ? followUpPrompt(annotation) : agentPrompt(annotation);
   const args = agent.args(prompt, workDir, model, agent.extra, effort, session);
   // Only meaningful in place: in a worktree the edits are committed to a
   // branch and reported from there, and nothing lands in your working tree.
@@ -592,7 +645,7 @@ function runAgent(id, done, origin = `http://localhost:${PORT}`) {
   // a server that does not run agents never sets it and no banner appears.
   annotation.status = "working";
   annotation.refinedDuringRun = false;
-  annotation.placeholderId = addThreadMessage(id, "agent", `${agent.label} is working on it…`);
+  annotation.placeholderId = addThreadMessage(id, "agent", `${agent.label} is ${undoing ? "undoing it" : "working on it"}…`);
   // RUN HISTORY (docs/protocol.md, "Run history"): one entry per run,
   // appended now and finished below — never rewritten after, so a re-run
   // adds to the record instead of replacing it.
@@ -604,6 +657,7 @@ function runAgent(id, done, origin = `http://localhost:${PORT}`) {
     startedAt: new Date().toISOString(),
     outcome: "running",
     ...(resumed ? { resumed: true } : {}),
+    ...(undoing ? { kind: "undo" } : {}),
   };
   annotation.runs = [...(annotation.runs ?? []), run];
 
@@ -707,8 +761,14 @@ function runAgent(id, done, origin = `http://localhost:${PORT}`) {
       // A reply that arrived DURING the run was not part of its prompt, so
       // the task goes back to the queue rather than reading as finished.
       if (a) {
-        a.status = err || a.refinedDuringRun ? "pending" : "sent";
+        // A failed undo is not work waiting to be sent: it goes back to
+        // finished, where Undo can be tried again.
+        a.status = (err && !undoing) || a.refinedDuringRun ? "pending" : "sent";
         if (!err && a.refinedDuringRun) reopen(a);
+        // Undone until a later run does the work again, by Redo or a reply.
+        if (!err && undoing) a.undoneAt = now();
+        else if (!err) delete a.undoneAt;
+        delete a.undoRequested;
         // Replace the placeholder rather than stacking a second bubble —
         // by id, because a user may have replied after it.
         a.thread = (a.thread ?? []).filter((m) => m.id !== a.placeholderId);
@@ -849,6 +909,7 @@ function reopen(a) {
 const SERVER_OWNED = [
   "sessionId", "createdAt", "updatedAt", "sentAt", "run", "progress", "reopenedAt", "reopenCount",
   "placeholderId", "refinedDuringRun", "resolvedAt", "runs", "agentSession",
+  "undoRequested", "undoneAt", "redoRequestedAt",
 ];
 
 /** One reference as the protocol has it — strings only, bounded — or null. */
@@ -1180,7 +1241,7 @@ async function handle(req, res) {
   // queuesTasks: a task sent while another is working waits its turn in
   // agentQueue (MAX_JOBS at a time), so the overlay need not block Send.
   if (path === "/health") {
-    return json(res, 200, { status: "ok", protocolVersion: PROTOCOL_VERSION, queuesTasks: true });
+    return json(res, 200, { status: "ok", protocolVersion: PROTOCOL_VERSION, queuesTasks: true, undo: UNDO });
   }
 
   // Identity is optional. `{"id": null}` is the protocol's "nobody": it
@@ -1316,6 +1377,35 @@ async function handle(req, res) {
       else if (annotation.status !== "pending") reopen(annotation);
       emitAnnotation("annotation.updated", annotation);
       return json(res, 201, annotation);
+    }
+    // UNDO: the agent takes the task's change back, now — the button is the
+    // commit, unlike a reply. REDO: the task goes back in the queue, to be
+    // sent like any other (docs/protocol.md, "Undoing a task").
+    if (seg[2] === "undo" && req.method === "POST") {
+      if (!annotation) return json(res, 404, { error: "no such annotation" });
+      if (!UNDO) return json(res, 409, { error: WORKTREE ? "in worktree mode the change is on its branch: delete the branch to undo it" : "this server runs no agent" });
+      if (annotation.status === "pending" || annotation.status === "working" || annotation.undoRequested) {
+        return json(res, 409, { error: "only a finished task can be undone" });
+      }
+      if (annotation.undoneAt) return json(res, 409, { error: "this task is already undone" });
+      if (!undoableRuns(annotation).length) return json(res, 409, { error: "the agent has not finished a run on this task" });
+      annotation.undoRequested = true;
+      addThreadMessage(id, "user", "Undo this change.");
+      enqueueAgent(id);
+      return json(res, 202, annotation);
+    }
+    if (seg[2] === "redo" && req.method === "POST") {
+      if (!annotation) return json(res, 404, { error: "no such annotation" });
+      if (!annotation.undoneAt || annotation.status === "pending" || annotation.status === "working") {
+        return json(res, 409, { error: "only an undone task can be redone" });
+      }
+      delete annotation.undoneAt;
+      annotation.status = "pending";
+      annotation.redoRequestedAt = now();
+      // Said in the thread, which is the instruction of a task sent again:
+      // the agent reads that it was undone and is wanted back.
+      addThreadMessage(id, "user", "Redo this change: make it again, as before it was undone.");
+      return json(res, 200, annotation);
     }
     if (!seg[2] && req.method === "GET") {
       return annotation ? json(res, 200, annotation) : json(res, 404, { error: "no such annotation" });

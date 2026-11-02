@@ -32,7 +32,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Image, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { TEXT_MAX } from "./limits";
 import { serverFlavor } from "./agentation";
 import { onAnnoKitEvent, streamLive as readStreamLive, subscribeToStreamLive } from "./events";
@@ -51,13 +51,16 @@ import {
   splitTaskBody,
   taskOriginA11yLabel,
   taskOriginLine,
+  taskReopenA11yLabel,
   taskReopenLabel,
 } from "./message-task";
 import { detailSendLabel } from "./queue-list";
 import { taskProgress } from "./agent-activity";
-import { readRuns, runLines } from "./runs";
+import { readRuns, runLines, taskUndoAction } from "./runs";
+import { serverSupportsUndo } from "./handshake";
 import {
   THREAD_POLL_INTERVAL_MS,
+  annotationPath,
   annotationThread,
   applyPolledThread,
   fetchAnnotation,
@@ -144,6 +147,8 @@ export function AnnoKitThreadView({
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const [handingOver, setHandingOver] = useState(false);
+  // An Undo or Redo request in flight; the server's state says the rest.
+  const [toggling, setToggling] = useState(false);
   // Stops the backstop timer the first time the read fails — the same rule
   // the comment poll follows, for the same reason (src/poll.ts).
   const [available, setAvailable] = useState(true);
@@ -304,6 +309,32 @@ export function AnnoKitThreadView({
     if (sent) onSent?.();
   };
 
+  /**
+   * UNDO / REDO (docs/protocol.md, "Undoing a task"). Undo starts the agent
+   * at once, so it asks first: it edits your files. Redo only puts the task
+   * back in the queue, where it is sent like any other, so it does not.
+   */
+  const toggleUndo = (kind: "undo" | "redo") => {
+    const go = async () => {
+      if (toggling) return;
+      setToggling(true);
+      const ok = (await postAccepted(transport, `${annotationPath(annotationId)}/${kind}`, {})).ok;
+      setToggling(false);
+      if (!ok) return;
+      void read(false);
+      handlers.current.onChanged?.();
+    };
+    if (kind === "redo") return void go();
+    Alert.alert(
+      "Undo this change?",
+      "The agent will revert the edits it made for this task. You can redo it later.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Undo", style: "destructive", onPress: () => void go() },
+      ],
+    );
+  };
+
   const origin = { source: annotation.source, routeName: annotation.routeName };
   const taskParts = splitTaskBody(annotationText(annotation));
   // Pictures to show, everything else to list (src/reference-view.ts).
@@ -319,6 +350,7 @@ export function AnnoKitThreadView({
     agentBusy,
   });
   const unseenLabel = newReplyLabel(unseen);
+  const undoAction = taskUndoAction(annotation, serverSupportsUndo());
 
   return (
     <AnnoKitDetailShell
@@ -408,17 +440,36 @@ export function AnnoKitThreadView({
             a sentence at a time, and starting a turn on each one would set
             the agent off on half a thought (src/queue-list.ts).
           */}
-          <Pressable
-            onPress={handOver}
-            disabled={!handOverAction.enabled}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !handOverAction.enabled }}
-            accessibilityLabel={handOverAction.label}
-            style={[styles.handOverBtn, !handOverAction.enabled && styles.disabled]}
-            testID="annokit-thread-send-agent"
-          >
-            <Text style={styles.handOverText}>{handOverAction.label}</Text>
-          </Pressable>
+          {/*
+            A FINISHED TASK'S BUTTON IS THE UNDO TOGGLE. It used to read
+            "With the agent", disabled — true, and nothing to do. Undo takes
+            the change back; once undone, Redo puts it back in the queue.
+          */}
+          {undoAction ? (
+            <Pressable
+              onPress={() => undoAction.kind !== "undoing" && toggleUndo(undoAction.kind)}
+              disabled={!undoAction.enabled || toggling}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !undoAction.enabled || toggling, busy: toggling }}
+              accessibilityLabel={undoAction.label}
+              style={[styles.undoBtn, (!undoAction.enabled || toggling) && styles.disabled]}
+              testID={`annokit-thread-${undoAction.kind}`}
+            >
+              <Text style={styles.undoText}>{undoAction.label}</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={handOver}
+              disabled={!handOverAction.enabled}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !handOverAction.enabled }}
+              accessibilityLabel={handOverAction.label}
+              style={[styles.handOverBtn, !handOverAction.enabled && styles.disabled]}
+              testID="annokit-thread-send-agent"
+            >
+              <Text style={styles.handOverText}>{handOverAction.label}</Text>
+            </Pressable>
+          )}
         </View>
       }
     >
@@ -495,7 +546,7 @@ export function AnnoKitThreadView({
           {!!reopenLabel && (
             <View
               style={styles.reopened}
-              accessibilityLabel={`${reopenLabel} by your reply — waiting to be sent again`}
+              accessibilityLabel={taskReopenA11yLabel(reopenLabel)}
               testID="annokit-thread-reopened"
             >
               <AnnoKitIcon name="agent" size={11} color={p.agentText} />
@@ -867,6 +918,22 @@ const useStyles = themedStyles((p) => ({
   },
   disabled: {
     opacity: 0.4,
+  },
+  /** The hand-over's place on a finished task: outlined, because it reverses work. */
+  undoBtn: {
+    marginHorizontal: 20,
+    marginTop: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: p.agentText,
+    minHeight: 42,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  undoText: {
+    color: p.agentText,
+    fontSize: 14,
+    fontWeight: "700",
   },
   handOverText: {
     color: p.onAccent,
