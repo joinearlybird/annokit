@@ -16,6 +16,7 @@
  *
  * Pure, so the wording and the counting are tested without a tree.
  */
+import { splitTaskBody } from "./message-task";
 import type { ServerAnnotation } from "./types";
 
 /** The protocol status a server sets while an agent has the task. */
@@ -69,18 +70,22 @@ export function agentActivity(annotations: readonly ServerAnnotation[] | null | 
     const a = working[0]!;
     const element = typeof a.element === "string" ? a.element.trim() : "";
     const written = a.comment ?? a.content ?? a.text;
-    const task = typeof written === "string" ? written.trim().replace(/\s+/g, " ") : "";
+    // The request alone: a task made from a team note carries the quoted
+    // discussion under it, which is the agent's context, not its name.
+    const task = typeof written === "string" ? splitTaskBody(written).request.replace(/\s+/g, " ") : "";
+    // An undo run is the same task going the other way (docs/protocol.md).
+    const verb = a.undoRequested === true ? "Undoing" : "Working on";
     const progress = taskProgress(a);
     const extra = {
       ...(typeof a.id === "string" ? { taskId: a.id } : {}),
       ...(progress ? { progress } : {}),
     };
     if (task) {
-      return { count: 1, label: `Working on “${task}”`, task, ...(element ? { element } : {}), ...extra };
+      return { count: 1, label: `${verb} “${task}”`, task, ...(element ? { element } : {}), ...extra };
     }
     return element
-      ? { count: 1, label: `Working on ${element}…`, element, ...extra }
-      : { count: 1, label: "Working on your task…", ...extra };
+      ? { count: 1, label: `${verb} ${element}…`, element, ...extra }
+      : { count: 1, label: `${verb} your task…`, ...extra };
   }
   return { count: working.length, label: `Working on ${working.length} tasks…` };
 }

@@ -44,6 +44,14 @@ describe("agentActivity", () => {
     );
   });
 
+  it("names a task made from a note by its request, and an undo as one", () => {
+    const comment = "Remove the hint row\n\nFrom the discussion:\n\nDana: It is noise";
+    expect(agentActivity([task({ status: WORKING_STATUS, comment })]).label).toBe("Working on “Remove the hint row”");
+    expect(agentActivity([task({ status: WORKING_STATUS, comment, undoRequested: true })]).label).toBe(
+      "Undoing “Remove the hint row”",
+    );
+  });
+
   it("counts when several are in flight, and ignores the ones that are not", () => {
     const a = agentActivity([
       task({ status: WORKING_STATUS, element: "A" }),

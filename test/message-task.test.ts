@@ -25,6 +25,8 @@ import {
   TASK_ORIGIN_LABEL,
   buildMessageTaskBody,
   isReopenedTask,
+  isRedoTask,
+  taskReopenA11yLabel,
   taskLifecycleLabel,
   taskReopenLabel,
   composeMessageTaskComment,
@@ -671,6 +673,17 @@ describe("taskReopenLabel", () => {
     expect(taskReopenLabel({ reopenedAt: "t", reopenCount: 1 })).toBe("Reopened");
     expect(taskReopenLabel({ reopenedAt: "t" })).toBe("Reopened");
     expect(taskReopenLabel({ reopenedAt: "t", reopenCount: 4 })).toBe("Reopened ×4");
+  });
+
+  it("says Redo while a redone task waits in the queue, until a reply reopens it", () => {
+    const redo = { status: "pending", redoRequestedAt: "2026-10-28T12:00:00.000Z" };
+    expect(isRedoTask(redo)).toBe(true);
+    expect(taskReopenLabel(redo)).toBe("Redo");
+    expect(taskReopenA11yLabel("Redo")).toMatch(/undone/);
+    expect(taskReopenLabel({ ...redo, status: "sent" })).toBeUndefined();
+    const replied = { ...redo, reopenedAt: "2026-10-28T12:05:00.000Z", reopenCount: 1 };
+    expect(taskReopenLabel(replied)).toBe("Reopened");
+    expect(taskReopenA11yLabel("Reopened")).toBe("Reopened by a reply — waiting to be sent again");
   });
 });
 

@@ -42,7 +42,7 @@ import {
 import { serverFlavor } from "./agentation";
 import { themedStyles, useAnnoKitTheme } from "./theme-context";
 import { AnnoKitIcon } from "./icon";
-import { taskOriginA11yLabel } from "./message-task";
+import { taskOriginA11yLabel, taskReopenA11yLabel } from "./message-task";
 import {
   buildTaskRows,
   queueEmptyText,
@@ -327,7 +327,7 @@ export function AnnoKitQueue({
                         accessibilityLabel={
                           row.working
                             ? "The agent is working on this task"
-                            : `${row.status} by a reply — waiting to be sent again`
+                            : taskReopenA11yLabel(row.status ?? "")
                         }
                         testID={`annokit-queue-${row.working ? "status-working" : "reopened"}-${i}`}
                       >

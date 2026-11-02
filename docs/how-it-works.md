@@ -40,7 +40,10 @@ The design choices behind the overlay, and what each surface looks like.
   same kind of thing. Its **Done** tab lists the tasks the agent has
   finished, newest first, each named by the title its agent gave it and with how its last run went ("Codex ·
   gpt-5.6-terra · high — Done · 2 files · 1m 40s"); open one to see every
-  run above its thread.
+  run above its thread. A finished task's button is **Undo this change**:
+  the agent reverts what it did for that task, and the task stays in Done
+  marked **Undone**. Its button then reads **Redo: back to the queue**,
+  which puts it back in the queue for you to send again.
 - **Every team note, from every screen.** **Comments** opens the notes list —
   grouped by route with the screen you are on first, settled ones dimmed —
   and tapping one TAKES YOU TO IT: same screen, it opens; another screen, the

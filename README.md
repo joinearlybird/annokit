@@ -355,8 +355,9 @@ so in that mode screenshots, attachments and team notes are off.
   you keep open watches for annotations. `npx annokit server` starts the
   agent itself for each task you send: Claude Code, Codex, Cursor, OpenCode,
   Gemini CLI or Grok, with the model and effort picked in the app. Each run
-  is recorded under the queue's Done tab, a reply continues the same agent
-  session, and `--worktree` gives every task its own branch, or a pull
+  is recorded under the queue's Done tab, where **Undo** asks the agent to
+  take a task's change back (and **Redo** queues it again), a reply
+  continues the same agent session, and `--worktree` gives every task its own branch, or a pull
   request with `--pr`.
 - **A versioned protocol.** `GET /health` reports a `protocolVersion`, and a
   client that does not match turns itself off with a warning instead of

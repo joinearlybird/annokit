@@ -469,6 +469,24 @@ export function taskStatusLabel(status: string | undefined): string {
  * the other is work the agent already called finished and that you have just
  * argued with. Without this the queue shows them as identical rows.
  */
+export const REDO_LABEL = "Redo";
+
+/** Waiting in the queue because Redo put it there after an undo. */
+export function isRedoTask(
+  a: { status?: string; reopenedAt?: string; redoRequestedAt?: string } | null | undefined,
+): boolean {
+  const redo = a?.redoRequestedAt;
+  if (a?.status !== "pending" || typeof redo !== "string" || !redo) return false;
+  return !a.reopenedAt || Date.parse(redo) >= Date.parse(a.reopenedAt);
+}
+
+/** What the reopen mark says to a screen reader: who put it back, and that it waits. */
+export function taskReopenA11yLabel(label: string): string {
+  return label === REDO_LABEL
+    ? "Redo — undone, and back in the queue to be sent again"
+    : `${label} by a reply — waiting to be sent again`;
+}
+
 export function isReopenedTask(a: { reopenedAt?: string } | null | undefined): boolean {
   return typeof a?.reopenedAt === "string" && a.reopenedAt.length > 0;
 }
@@ -479,8 +497,11 @@ export function isReopenedTask(a: { reopenedAt?: string } | null | undefined): b
  * reader is about to have.
  */
 export function taskReopenLabel(
-  a: { reopenedAt?: string; reopenCount?: number } | null | undefined,
+  a: { status?: string; reopenedAt?: string; reopenCount?: number; redoRequestedAt?: string } | null | undefined,
 ): string | undefined {
+  // Back in the queue by Redo (docs/protocol.md, "Undoing a task"), unless
+  // a reply has reopened it since: then the reply is the newer story.
+  if (isRedoTask(a)) return REDO_LABEL;
   if (!isReopenedTask(a)) return undefined;
   const count = typeof a?.reopenCount === "number" && a.reopenCount > 1 ? a.reopenCount : 0;
   return count > 1 ? `Reopened ×${count}` : "Reopened";
@@ -493,7 +514,7 @@ export function taskReopenLabel(
  * is true and useless.
  */
 export function taskLifecycleLabel(
-  a: { status?: string; reopenedAt?: string; reopenCount?: number } | null | undefined,
+  a: { status?: string; reopenedAt?: string; reopenCount?: number; redoRequestedAt?: string } | null | undefined,
 ): string {
   const reopened = taskReopenLabel(a);
   if (reopened && (!a?.status || a.status === "pending")) {

@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { forgetServerFlavor, serverFlavor } from "../src/agentation";
 import type { AnnoKitConfig } from "../src/env";
-import { checkProtocol, fetchViewer, handshakeRetryDelay, probeProtocol, registerSession } from "../src/handshake";
+import { checkProtocol, fetchViewer, handshakeRetryDelay, probeProtocol, registerSession, serverSupportsUndo } from "../src/handshake";
 import { AnnoKitTransport } from "../src/transport";
 import { annoKitPreferences, forgetPreferences } from "../src/prefs";
 
@@ -61,6 +61,15 @@ describe("checkProtocol", () => {
     fetchMock.mockResolvedValue(health({ status: "ok", protocolVersion: 1 }));
     await checkProtocol(transport());
     expect(annoKitPreferences().blockSendWhileWorking).toBe(true);
+  });
+
+  it("offers undo only when /health says the server can", async () => {
+    fetchMock.mockResolvedValue(health({ status: "ok", protocolVersion: 1, undo: true }));
+    await checkProtocol(transport());
+    expect(serverSupportsUndo()).toBe(true);
+    fetchMock.mockResolvedValue(health({ status: "ok", protocolVersion: 1, undo: "yes" }));
+    await checkProtocol(transport());
+    expect(serverSupportsUndo()).toBe(false);
   });
 
   it("disables loudly on a newer protocol version", async () => {

@@ -3,7 +3,7 @@
  * lines, and the Done tab's list of finished tasks.
  */
 import { describe, expect, it } from "vitest";
-import { doneRow, doneTasks, isFinishedTask, readRuns, runDuration, runLines } from "../src/runs";
+import { doneRow, doneTasks, isFinishedTask, readRuns, runDuration, runLines, taskUndoAction, undoableRuns } from "../src/runs";
 import type { ServerAnnotation } from "../src/types";
 
 const RUN = {
@@ -125,5 +125,41 @@ describe("a continued run", () => {
   it("says it carried on from the run before", () => {
     expect(runLines(readRuns([{ ...RUN, resumed: true }])[0]!).how).toBe("Done · continued · 2 files · 1m 40s");
     expect(readRuns([{ ...RUN, resumed: "yes" }])[0]!.resumed).toBeUndefined();
+  });
+});
+
+describe("undo", () => {
+  const UNDO = { ...RUN, id: "u1", kind: "undo", startedAt: "2026-10-28T11:00:00.000Z", finishedAt: "2026-10-28T11:00:12.000Z", files: [{ path: "app/Button.tsx" }], summary: "Put the button back." };
+
+  it("reads an undo run, and says it as one", () => {
+    const [, undo] = readRuns([RUN, UNDO]);
+    expect(undo!.kind).toBe("undo");
+    expect(runLines(undo!)).toMatchObject({ how: "Undone · 1 file · 12s", tone: "muted" });
+    expect(runLines({ ...undo!, outcome: "failed" }).how).toMatch(/^Undo failed/);
+    expect(readRuns([{ ...RUN, kind: "other" }])[0]!.kind).toBeUndefined();
+  });
+
+  it("takes back the work since the last undo that worked", () => {
+    const failedUndo = { ...UNDO, id: "u0", outcome: "failed", startedAt: "2026-10-28T10:30:00.000Z" };
+    const redo = { ...RUN, id: "r2", startedAt: "2026-10-28T12:00:00.000Z", finishedAt: "2026-10-28T12:01:00.000Z" };
+    expect(undoableRuns(readRuns([RUN, failedUndo])).map((r) => r.id)).toEqual(["r1"]);
+    expect(undoableRuns(readRuns([RUN, UNDO]))).toEqual([]);
+    expect(undoableRuns(readRuns([RUN, UNDO, redo])).map((r) => r.id)).toEqual(["r2"]);
+  });
+
+  it("keeps the change's title on an undone task in Done", () => {
+    const row = doneRow({ id: "t", comment: "Darker", status: "sent", undoneAt: UNDO.finishedAt, runs: [{ ...RUN, title: "Darker button" }, UNDO] });
+    expect(row).toMatchObject({ text: "Darker button", how: "Undone · 1 file · 12s", tone: "muted" });
+  });
+
+  it("offers Undo on finished work, Redo once undone, and nothing otherwise", () => {
+    const done = { id: "t", status: "sent", runs: [RUN] };
+    expect(taskUndoAction(done, true)?.kind).toBe("undo");
+    expect(taskUndoAction(done, false)).toBeNull();
+    expect(taskUndoAction({ ...done, status: "pending" }, true)).toBeNull();
+    expect(taskUndoAction({ ...done, runs: [{ ...RUN, outcome: "failed" }] }, true)).toBeNull();
+    expect(taskUndoAction({ ...done, undoRequested: true }, true)).toMatchObject({ kind: "undoing", enabled: false });
+    expect(taskUndoAction({ ...done, status: "working", undoRequested: true }, true)?.kind).toBe("undoing");
+    expect(taskUndoAction({ ...done, runs: [RUN, UNDO], undoneAt: UNDO.finishedAt }, true)?.kind).toBe("redo");
   });
 });

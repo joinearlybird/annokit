@@ -40,6 +40,10 @@ then lets Send through while a task is in flight (see
 [`working`](#annotations)). Absent or anything but `true` means "assume it
 does not".
 
+**`undo: true` — optional, additive.** The server takes a finished task's
+change back and puts an undone task back in the queue (see
+[Undoing a task](#undoing-a-task)). Only then does the overlay offer Undo.
+
 ## Viewer
 
 `GET /me` → who the server believes is holding this device, answered from
@@ -268,6 +272,7 @@ to the record instead of replacing it:
     "summary": "Made the button darker.",     // the agent's own one line
     "title": "Darker primary button",         // a few words naming the change
     "resumed": true,                          // continued the agent's session from the run before
+    "kind": "undo",                           // took the task's change back (Undoing a task); absent: an ordinary run
     "error": "Timed out after 600s."          // why it failed or stopped
   }
 ]
@@ -648,6 +653,50 @@ with a **user** message on an annotation that is neither `pending` nor
 - **The instruction of a reopened task is its `thread[]`,** not its `comment`
   — the comment is the original request the agent may already have addressed.
   A server building a prompt for the hand-over should say so.
+
+## Undoing a task
+
+**Undo takes a finished task's change back; Redo puts it back in the
+queue.** Both are optional, and a server that offers them says
+`"undo": true` in [`/health`](#versioning). Without that the overlay shows
+neither.
+
+`POST /annotations/:aid/undo` (empty body) → `202` with the annotation.
+
+- **Only a finished task** (not `pending` or `working`) that is not already
+  undone and has a run that finished `done` since the last undo that
+  worked. Otherwise `409` with `{"error": "…"}`; the overlay shows the
+  button only when it should succeed.
+- **It starts at once.** Unlike a reply, which re-queues and waits for
+  Send, Undo is the commit: the overlay asks first, then the server runs the
+  agent, in turn with any other runs. Set `undoRequested: true` until the
+  run ends; the overlay reads it as **Undoing…**.
+- **The agent reverts only this task's edits.** Tell it the request, what
+  its runs did (`summary`), and the files they touched, and to keep any
+  other changes in those files: other tasks, or the developer, may have
+  edited them since. A `git restore` would take that work too.
+- **Record it as a run with `"kind": "undo"`**, post a user message
+  (`Undo this change.`) and the agent's reply in `thread[]`, and when it
+  worked stamp `undoneAt`. The status goes back to the finished one either
+  way: a failed undo is not work waiting to be sent, and Undo can be tried
+  again.
+- **In place only.** With each task in its own worktree, the change is a
+  branch and never reached the developer's tree. Deleting the branch is the
+  undo, so such a server does not offer it.
+
+`POST /annotations/:aid/redo` (empty body) → `200` with the annotation.
+
+- **Only an undone task.** Otherwise `409`.
+- **It re-queues, it does not run.** Clear `undoneAt`, set the status to
+  `pending`, stamp `redoRequestedAt`, and post a user message saying to make
+  the change again. That message is in the thread, which is a sent-again
+  task's instruction, so the agent knows it was undone. The overlay marks
+  the task **Redo** in the queue, and Send hands it over like any other.
+
+Any later run that finishes `done`, by Redo or by a reply that reopened
+the task, clears `undoneAt`: the work is back. All three fields are the
+server's; drop them from a client's create or update. Additive:
+`protocolVersion` stays **1**.
 
 ## Comments
 
