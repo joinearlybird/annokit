@@ -89,6 +89,7 @@ import {
   screenshotsAvailable,
   setScreenshotsEnabled,
 } from "./screenshot";
+import { readDevice } from "./device";
 import { subscribeToShake } from "./shake";
 import type { AnnoKitTimeouts } from "./transport";
 import { AnnoKitTransport, makeId } from "./transport";
@@ -143,6 +144,8 @@ export type { OutputDetail } from "./prefs";
 export type { ViewerIdentity, ViewerSource } from "./viewer";
 export { viewerIdentity } from "./viewer";
 export type { PendingCapture, ServerAnnotation } from "./types";
+export type { DeviceInfo, DeviceSources } from "./device";
+export { describeDevice, readDevice } from "./device";
 // ── Headless capture (bring your own UI over our capture engine) ──────────
 // `onCapture` on the provider hands hosts the capture + these helpers; the
 // wire-speaking pieces are exported so an own-backend host can still build
@@ -1257,6 +1260,9 @@ function AnnoKitRuntime({
           routeName,
           screenshotUri: null,
           canScreenshot,
+          // The device as the user sees it NOW: orientation and colour
+          // scheme can change before the task is sent.
+          device: readDevice(),
         };
         // HEADLESS SEAM: the decision and the helper wiring are pure and
         // tested (src/capture-flow.ts); this component only clears the aim

@@ -424,6 +424,10 @@ function agentPrompt(a) {
   }
   if (a.testID) lines.push(`  testID: ${a.testID}`);
   if (a.routeName) lines.push(`  screen: ${a.routeName}`);
+  // The device as the user saw it: a layout complaint reads differently at
+  // 320 points and font scale 1.3 than on a tablet, and a colour complaint
+  // needs the scheme.
+  if (a.device) lines.push("", `DEVICE: ${deviceLine(a.device)}`);
   const attached = attachedLines(a.references);
   if (attached.length) lines.push("", "ATTACHED (what they picked to go with the request):", ...attached);
   // Where the app's assets live, whether or not one was attached: "use our
@@ -940,7 +944,54 @@ function boundCapture(body) {
   }
   if (capture.agent !== undefined) capture.agent = cleanTaskAgent(capture.agent);
   if (capture.agent === null) delete capture.agent;
+  if (capture.device !== undefined) {
+    const device = cleanDevice(capture.device);
+    if (device) capture.device = device;
+    else delete capture.device;
+  }
   return capture;
+}
+
+/**
+ * The device a capture was made on (docs/protocol.md, "device"), bounded,
+ * or null. Enum fields keep only the values the protocol names; numbers
+ * must be finite and plausible; strings are clamped; unknown keys go.
+ */
+function cleanDevice(d) {
+  if (!d || typeof d !== "object" || !["ios", "android", "web"].includes(d.platform)) return null;
+  const num = (v, lo, hi) => (typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi ? v : null);
+  const width = num(d.window?.width, 0, 20000);
+  const height = num(d.window?.height, 0, 20000);
+  if (width === null || height === null) return null;
+  const out = {
+    platform: d.platform,
+    window: { width, height },
+    pixelRatio: num(d.pixelRatio, 0.5, 10) ?? 1,
+    fontScale: num(d.fontScale, 0.2, 5) ?? 1,
+    colorScheme: d.colorScheme === "dark" || d.colorScheme === "light" ? d.colorScheme : null,
+    orientation: d.orientation === "landscape" || d.orientation === "portrait" ? d.orientation : (width > height ? "landscape" : "portrait"),
+  };
+  if (typeof d.osVersion === "string" && d.osVersion) out.osVersion = clampText(d.osVersion, 40);
+  if (typeof d.model === "string" && d.model) out.model = clampText(d.model, 80);
+  if (["phone", "tablet", "tv", "desktop"].includes(d.idiom)) out.idiom = d.idiom;
+  if (d.simulator === true) out.simulator = true;
+  return out;
+}
+
+/** One line for the prompt: `iPhone · iOS 26.0 · 402×874 pt @3x · dark · font scale 1.0` (src/device.ts, describeDevice). */
+function deviceLine(d) {
+  const tablet = d.idiom === "tablet";
+  const name = d.model ?? (d.platform === "ios" ? (tablet ? "iPad" : "iPhone") : d.platform === "android" ? "Android device" : "Browser");
+  const osName = d.platform === "ios" ? (tablet ? "iPadOS" : "iOS") : d.platform === "android" ? "Android" : null;
+  const parts = [name];
+  if (osName) parts.push(d.osVersion ? `${osName} ${d.osVersion}` : osName);
+  parts.push(`${d.window.width}×${d.window.height} pt @${d.pixelRatio}x`);
+  if (d.orientation === "landscape") parts.push("landscape");
+  if (d.colorScheme) parts.push(d.colorScheme);
+  const scale = Math.round(Number(d.fontScale) * 100) / 100;
+  parts.push(`font scale ${Number.isInteger(scale) ? scale.toFixed(1) : scale}`);
+  if (d.simulator) parts.push("simulator");
+  return parts.join(" · ");
 }
 
 /** An effort level as the CLIs spell them: "low", "xhigh". */

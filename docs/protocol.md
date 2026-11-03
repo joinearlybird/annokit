@@ -122,7 +122,12 @@ Additive: `protocolVersion` stays **1**. A v1 client tolerates a 404 here.
     { "type": "asset", "value": "/api/assets/brand/logo.png", "label": "logo.png" },
     { "type": "api", "value": "POST /api/data/todos", "label": "Todos — Add new entries" }
   ],
-  "agent": { "id": "claude", "model": "opus", "effort": "high" }  // optional, see Agent → Per task
+  "agent": { "id": "claude", "model": "opus", "effort": "high" },  // optional, see Agent → Per task
+  "device": {                        // optional, additive; Standard and Full detail (see below)
+    "platform": "ios", "osVersion": "26.0", "idiom": "phone",
+    "window": { "width": 402, "height": 874 }, "pixelRatio": 3, "fontScale": 1,
+    "colorScheme": "dark", "orientation": "portrait"
+  }
 }
 ```
 
@@ -134,7 +139,7 @@ sent:
 |---|---|
 | **Full** | everything above |
 | **Standard** (default) | no `computedStyles` or `accessibility`, and `componentStack` is `[]` (also in each `elements[]` entry) |
-| **Minimal** | Standard, and also no `nearbyText`, `source` or `testID` (also in each `elements[]` entry) |
+| **Minimal** | Standard, and also no `nearbyText`, `source`, `testID` (also in each `elements[]` entry) or `device` |
 
 `componentStack` is always present, so an empty one means "not sent", not
 "no components". When the touch hit nothing the client can name, `element`
@@ -158,6 +163,17 @@ than a guess: a fabricated offset is worse than none, because a consumer
 cannot tell it apart from a real one. This client measures the offset as
 (scroll container window origin − content view window origin) and omits
 `scrollViewTag`/`offsetX` when it could not read them.
+
+**`device`** — optional, additive (`protocolVersion` stays 1). The device
+the capture was made on, as the user saw it at that moment: `platform`
+(`ios` | `android` | `web`), `osVersion`, `idiom` (`phone` | `tablet` |
+`tv` | `desktop`), `window` (points), `pixelRatio`, `fontScale`,
+`colorScheme` (`light` | `dark` | `null`), `orientation`, and on Android
+`model` (brand and model) and `simulator` (true on an emulator). iOS has no
+`model`: React Native exposes none and this client takes no peer for it.
+No identifiers, locale or network details are sent. A consumer that
+receives a screenshot needs `window` to read coordinates off it. Servers
+SHOULD bound it (see *Server obligations*, 2) and MAY ignore it.
 
 Web-capture clients send the same route with DOM-flavored identity fields
 (`elementPath`, `cssClasses`, `url`, …) instead of the native ones; servers
@@ -1013,6 +1029,11 @@ limits itself to (`src/limits.ts`, `src/viewer.ts`):
   source (`ATTACHMENT_ITEMS_MAX`) and 2000 characters per item title,
   subtitle and group (`FIELD_MAX`).
 - 40 characters for a typed display name.
+- `device`: `platform`, `idiom`, `colorScheme` and `orientation` are enums
+  (drop any other value), `osVersion` ≤ 40 and `model` ≤ 80 characters,
+  numbers finite and plausible (window up to 20000 points, pixel ratio
+  0.5–10, font scale 0.2–5), booleans only for `simulator`, unknown keys
+  dropped — what the reference stub's `cleanDevice` does.
 
 Enforce your own limits at or below those, and remember that a client limit
 is bypassed by anything that is not this client — curl included.

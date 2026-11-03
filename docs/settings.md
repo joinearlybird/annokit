@@ -56,7 +56,7 @@ running keeps the agent it started with.
 | Level | What the annotation body carries |
 |---|---|
 | **Minimal** | `id`, `comment`, `kind`, `platform`, `element`, `routeName`, `x`/`y`, `boundingBox`, `scroll`, `references` |
-| **Standard** (default) | …plus `source` (file + line), `testID` and `nearbyText` |
+| **Standard** (default) | …plus `source` (file + line), `testID`, `nearbyText` and `device` (platform, OS version, window size, pixel ratio, font scale, colour scheme, orientation) |
 | **Full** | …plus `componentStack`, `computedStyles` and `accessibility` |
 
 The first row is never a choice: an annotation nobody can locate is not a

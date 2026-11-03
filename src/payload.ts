@@ -8,6 +8,7 @@
  */
 
 import type { AnnotationReference } from "./attachments";
+import type { DeviceInfo } from "./device";
 import type { InspectorHit } from "./inspector";
 import type { OutputDetail } from "./prefs";
 import type { PendingCapture } from "./types";
@@ -76,6 +77,14 @@ export interface AnnotationBody {
    * Model and effort absent: that agent's defaults.
    */
   agent?: { id: string; model?: string; effort?: string };
+  /**
+   * The device the capture was made on (src/device.ts). Optional and
+   * additive: platform, OS version, window size in points, pixel ratio,
+   * font scale, colour scheme and orientation — what an agent needs to
+   * read a layout complaint, or coordinates off a screenshot. Sent at
+   * Standard detail and up, never at Minimal.
+   */
+  device?: DeviceInfo;
 }
 
 /** One element of a multi-select annotation — the per-element identity slice. */
@@ -152,6 +161,7 @@ export function buildAnnotationBody(
     isMultiSelect: multi || undefined,
     elements: multi && hit ? [hit, ...extras].map(elementFromHit) : undefined,
     references: references && references.length > 0 ? references : undefined,
+    device: capture.device,
   };
 }
 
@@ -172,8 +182,9 @@ export function buildAnnotationBody(
  * queue row and the detail header all read.
  *
  *   MINIMAL  — the above, and nothing else. No source file, no testID, no
- *              component stack, no nearby text.
- *   STANDARD — plus `source`, `testID` and `nearbyText`. The default.
+ *              component stack, no nearby text, no device.
+ *   STANDARD — plus `source`, `testID`, `nearbyText` and `device`. The
+ *              default.
  *   FULL     — plus `componentStack`, `computedStyles` and `accessibility`:
  *              appearance context. Styles ride here and not at STANDARD
  *              because they are the most app-revealing field this overlay
@@ -217,5 +228,7 @@ export function applyOutputDetail(body: AnnotationBody, detail: OutputDetail): A
     elements: body.elements?.map(trimElement),
   };
   if (detail === "standard") return trimmed;
-  return { ...trimmed, nearbyText: undefined, source: undefined, testID: undefined };
+  // `device` goes with the on-screen content: Minimal is the level for
+  // keeping the app's circumstances on the device too.
+  return { ...trimmed, nearbyText: undefined, source: undefined, testID: undefined, device: undefined };
 }
