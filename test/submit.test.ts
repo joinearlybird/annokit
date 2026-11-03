@@ -155,7 +155,7 @@ describe("submitAgentCapture", () => {
     const { transport, calls } = fakeTransport({ id: "a1" });
     const ctx = { transport, sessionId: "s", capture: shot };
     await submitAgentCapture(ctx, "x", { attachScreenshot: true });
-    expect(calls.map((c) => c.path)).toEqual(["/sessions/s/annotations", "/annotations/a1/screenshot"]);
+    expect(calls.map((c) => c.path)).toEqual(["/sessions/s/annotations", "/annotations/a1/screenshot?marks=badge%2Coutline"]);
 
     calls.length = 0;
     await submitAgentCapture(ctx, "x"); // switch off
@@ -231,7 +231,7 @@ describe("screenshot release on submit", () => {
     const { freed, submitAgent, restore } = await loadSubmit();
     const { ctx, calls } = shotCtx({ id: "a1" });
     await submitAgent(ctx, "make it blue", { attachScreenshot: true });
-    expect(calls.map((c) => c.path)).toContain("/annotations/a1/screenshot");
+    expect(calls.map((c) => c.path)).toContain("/annotations/a1/screenshot?marks=badge%2Coutline");
     expect(freed).toEqual([SHOT]);
     restore();
   });
@@ -240,7 +240,7 @@ describe("screenshot release on submit", () => {
     const { freed, submitAgent, restore } = await loadSubmit();
     const { ctx, calls } = shotCtx({ id: "a1" });
     await submitAgent(ctx, "make it blue", { attachScreenshot: false });
-    expect(calls.map((c) => c.path)).not.toContain("/annotations/a1/screenshot");
+    expect(calls.map((c) => c.path)).not.toContain("/annotations/a1/screenshot?marks=badge%2Coutline");
     expect(freed).toEqual([SHOT]);
     restore();
   });
@@ -311,7 +311,7 @@ describe("a team note carries its screenshot", () => {
     const { submitComment, restore } = await loadSubmit();
     const { ctx, calls } = shotCtx({ comment: { id: "c1" } });
     await submitComment(ctx, "look at this", null, { attachScreenshot: true });
-    expect(calls.map((c) => c.path)).toContain("/comments/c1/screenshot");
+    expect(calls.map((c) => c.path)).toContain("/comments/c1/screenshot?marks=badge%2Coutline");
     restore();
   });
 
@@ -319,7 +319,7 @@ describe("a team note carries its screenshot", () => {
     const { submitComment, restore } = await loadSubmit();
     const { ctx, calls } = shotCtx({ comment: { id: "c1" } });
     await submitComment(ctx, "just words", null, { attachScreenshot: false });
-    expect(calls.map((c) => c.path)).not.toContain("/comments/c1/screenshot");
+    expect(calls.map((c) => c.path)).not.toContain("/comments/c1/screenshot?marks=badge%2Coutline");
     restore();
   });
 
@@ -351,7 +351,7 @@ describe("a team note carries its screenshot", () => {
     const { submitComment, restore } = await loadSubmit();
     const { ctx, calls } = shotCtx({ comment: { id: "c/1" } });
     await submitComment(ctx, "x", null, { attachScreenshot: true });
-    expect(calls.map((c) => c.path)).toContain("/comments/c%2F1/screenshot");
+    expect(calls.map((c) => c.path)).toContain("/comments/c%2F1/screenshot?marks=badge%2Coutline");
     restore();
   });
 });

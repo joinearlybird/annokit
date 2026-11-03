@@ -1,8 +1,8 @@
 /**
  * Composer: a BOTTOM SHEET summarizing the captured element
- * (name + source line), a multiline comment input, an optional screenshot toggle
- * (available only when react-native-view-shot resolved AND the tap-time
- * capture succeeded), an "Attach" affordance opening the attachment-source
+ * (name + source line), a multiline comment input, an optional screenshot
+ * switch (drawn when a shot COULD be taken — `canScreenshot` — and taking
+ * one when it goes on), an "Attach" affordance opening the attachment-source
  * pickers (src/attachments.ts — generic, host-extensible; picked items ride
  * along as `references[]`), and Submit/Cancel.
  *
@@ -29,12 +29,14 @@
  * (product owner: acceptable — the controls stay put rather than jumping
  * as you lean one way or the other).
  *
- * THE SCREENSHOT IS OPT-IN. It is CAPTURED eagerly — before the destination
- * is known, because it cannot be taken later — but it is not ATTACHED until
- * the switch is flipped. Those are two different booleans, and treating them
- * as one is what left the Team half showing an attachment row and a permanent
- * orange drop notice about a screenshot nobody had asked for
- * (SCREENSHOT_ATTACHED_BY_DEFAULT in src/composer-view.ts).
+ * THE SCREENSHOT IS OPT-IN. Nothing is captured until the switch goes on:
+ * the sheet steps out of the way for a beat, the shot is taken, and only
+ * then is there a file. "Could be taken" (`canScreenshot`) and "is
+ * attached" (`screenshotUri` plus the switch) are two different booleans,
+ * and treating them as one is what once left the Team half showing an
+ * attachment row and a permanent orange drop notice about a screenshot
+ * nobody had asked for (SCREENSHOT_ATTACHED_BY_DEFAULT in
+ * src/composer-view.ts).
  *
  * SHEET, NOT CARD: it slides up over the lower ~half of the screen and its
  * backdrop is CLEAR, so the aim highlight and its name label (rendered by

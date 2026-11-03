@@ -27,6 +27,9 @@ import type { AnnotationReference } from "./attachments";
 import type { AgentRun } from "./agent-config";
 import { buildScreenshotPart, releaseScreenshot } from "./screenshot";
 import { annotationScreenshotPath, sessionAnnotationsPath } from "./url";
+
+/** What the overlay draws into a screenshot before taking it (src/burn-in.tsx). */
+export const SCREENSHOT_MARKS = "badge,outline";
 import { makeId } from "./transport";
 import type { AnnoKitTransport } from "./transport";
 import type { PendingCapture } from "./types";
@@ -140,7 +143,9 @@ export async function submitAgentCapture(
     if (part) {
       const form = new FormData();
       form.append("file", part as unknown as Blob);
-      await ctx.transport.postForm(annotationScreenshotPath(finalId), form);
+      // The overlay burned the task's badge and the element's outline into
+      // the shot (src/burn-in.tsx); say so, so a server can word its prompt.
+      await ctx.transport.postForm(annotationScreenshotPath(finalId, SCREENSHOT_MARKS), form);
     }
   }
   // The capture has been used, or was never going to be: either way the
@@ -174,7 +179,7 @@ export async function submitCommentCapture(
     if (part) {
       const form = new FormData();
       form.append("file", part as unknown as Blob);
-      await ctx.transport.postForm(commentScreenshotPath(created.id), form);
+      await ctx.transport.postForm(commentScreenshotPath(created.id, SCREENSHOT_MARKS), form);
     }
   }
   // Used, or never going to be: either way the temp file's job is done and

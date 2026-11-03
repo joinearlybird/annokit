@@ -73,7 +73,7 @@ export interface CaptureHelpers {
 
 /**
  * A host's own composer. Called at the moment the built-in sheet would
- * open (aim confirmed, screenshot — when available — already taken).
+ * open (aim confirmed; no screenshot yet — `captureScreenshot` takes one).
  * Return TRUTHY to take over: the aim clears and no sheet opens. Return
  * falsy to let the built-in flow proceed (which also makes this a passive
  * tap into the capture pipeline).

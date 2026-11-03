@@ -179,8 +179,18 @@ export function sessionEventsPath(sessionId: string): string {
 }
 
 /** `POST /annotations/:id/screenshot` — the multipart upload. */
-export function annotationScreenshotPath(annotationId: string): string {
-  return `/annotations/${seg(annotationId)}/screenshot`;
+export function annotationScreenshotPath(annotationId: string, marks?: string): string {
+  return `/annotations/${seg(annotationId)}/screenshot${marksQuery(marks)}`;
+}
+
+/**
+ * `?marks=badge,outline`: what the client drew into the shot before taking
+ * it (src/burn-in.tsx), so a server that words a prompt around the picture
+ * can say so exactly. Advisory and additive; a server ignores an unknown
+ * query, and a client that drew nothing sends nothing.
+ */
+export function marksQuery(marks?: string): string {
+  return marks ? `?marks=${encodeURIComponent(marks)}` : "";
 }
 
 /**

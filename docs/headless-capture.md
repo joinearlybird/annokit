@@ -67,8 +67,13 @@ everything:
 - `captureScreenshot()` → take the screenshot NOW and resolve to its URI,
   or null if it could not be taken. Nothing is captured until something
   asks, so call this before `submitAgent({ attachScreenshot: true })` if
-  you want one to ride along. The package hides its own chrome for a beat;
-  hide yours too if it covers the screen.
+  you want one to ride along. For a beat the package hides its own chrome
+  (floating button, aim outline, banner), puts the app back if it had
+  pushed it up, and draws THIS capture's mark into the frame — its outline
+  and the number the task will wear — at one pixel per point on native;
+  hide your own sheet too if it covers the screen. (A crop around the
+  element is not produced: that needs pixel work the package takes no peer
+  for; the box in the task plus the 1x image is what a server hands on.)
 - `releaseScreenshot()` → delete the capture's screenshot temp file. See
   **Who owns the screenshot** below.
 
