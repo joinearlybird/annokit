@@ -138,7 +138,8 @@ without Expo:
 emulator and your computer's LAN address on a physical device.
 
 **4. Run it.** The package ships a stub server that implements the whole
-protocol in memory, using nothing but Node:
+protocol in memory (screenshots are also mirrored to a temp directory while
+it runs, so the agent can open them), using nothing but Node:
 
 ```bash
 npx annokit server   # terminal 1: the stub on :4788

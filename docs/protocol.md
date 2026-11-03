@@ -330,6 +330,19 @@ server without it loses nothing: Done lists finished tasks by status.
   entry is what the note detail renders; without it the note reads as it
   always did.
 
+  **A server that runs an agent should hand it the picture**, as a file
+  path or as image bytes, never as the URL: the agent is a process on the
+  server's machine, not a browser with the session's token. The reference
+  stub mirrors each upload under `os.tmpdir()/annokit-<port>/screenshots/`
+  (bounded by the same cap as its memory store, wiped when it starts and
+  exits) and names the path in the prompt, with the task's `boundingBox`
+  and tap point and how the image's pixels relate to window points. It
+  works that scale out from the PNG's own header against `device.window`,
+  never from anything the client claims; a client MAY append
+  `?marks=badge,outline` to the upload URL to say it drew its own task
+  marker and the element's outline into the shot, which only changes how
+  the prompt describes the picture.
+
   **Both screenshot uploads go over `XMLHttpRequest`, not `fetch`.** On Expo SDK 57
   the global `fetch` is Expo's WinterCG implementation, which rejects React
   Native's `{uri, name, type}` FormData part outright (`Unsupported
