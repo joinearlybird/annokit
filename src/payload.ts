@@ -13,6 +13,7 @@ import type { InspectorHit } from "./inspector";
 import type { OutputDetail } from "./prefs";
 import { captureBoundingBox, captureElementName, wireShape } from "./shape";
 import type { CaptureShape } from "./shape";
+import type { Sketch } from "./sketch";
 import type { PendingCapture } from "./types";
 
 export interface AnnotationBody {
@@ -39,6 +40,12 @@ export interface AnnotationBody {
    * not know it sees an element at `boundingBox`, as before.
    */
   shape?: Exclude<CaptureShape, "element">;
+  /**
+   * The strokes of a sketch capture (src/sketch.ts), in window coordinates:
+   * pen polylines and two-point arrows. Optional, additive, never trimmed by
+   * Output Detail; `boundingBox` is their bounds.
+   */
+  sketch?: Sketch;
   nearbyText?: string;
   /**
    * Flattened style of the touched view, as compact JSON. The wire name is
@@ -159,6 +166,7 @@ export function buildAnnotationBody(
     y: capture.y,
     boundingBox: captureBoundingBox(capture),
     shape: wireShape(capture),
+    sketch: capture.sketch,
     nearbyText: hit?.nearbyText,
     computedStyles: safeJson(hit?.styles),
     accessibility: safeJson(hit?.accessibility),

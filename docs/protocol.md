@@ -159,8 +159,24 @@ capture and one of three words otherwise:
   is the drawn rectangle; `element` is the component sampled at its centre
   (`"Area"` when the region is empty); other sampled components ride in
   `elements[]`.
-- `"sketch"` — strokes drawn over the screen; defined with the `sketch`
-  field when that ships.
+- `"sketch"` — the chip's Draw mode left strokes over the screen. The body
+  carries them as `sketch`:
+  ```jsonc
+  "sketch": { "strokes": [
+    { "tool": "pen", "points": [ { "x": 120, "y": 340 }, { "x": 131.5, "y": 338 }, … ] },
+    { "tool": "arrow", "points": [ { "x": 60, "y": 400 }, { "x": 180, "y": 360 } ] }   // tail, then tip
+  ] }
+  ```
+  Points are window coordinates, the same space as `x`/`y`/`boundingBox`;
+  a pen stroke is a polyline, an arrow is exactly two points and its head
+  is drawn by whoever renders it. `boundingBox` is the strokes' bounds
+  (padded by half the 3-point stroke width); `element` is the component
+  found under their centre (`"Sketch"` when none), with other components
+  found under them in `elements[]`. The client sends at most 20 strokes of
+  400 points each, simplified and rounded to a tenth of a point; servers
+  SHOULD bound what they store (the reference stub keeps up to 50 strokes
+  of 1000 finite points and drops anything else). `sketch` is never trimmed
+  by Output Detail.
 
 Team notes carry the same field (see *Comments*), so a task made from a
 note keeps the note's shape. `shape` is never trimmed by Output Detail: it

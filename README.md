@@ -22,7 +22,9 @@ reference implementation.
 - **Real component identity.** Aiming names the nearest user component —
   `PrimaryButton`, not `View` — symbolicated to its definition site
   (`FeedRow · FeedRow.tsx:9`). Drag to survey before you commit, hold to
-  pin an exact spot, or switch to Area to draw a rectangle.
+  pin an exact spot, switch to Area to draw a rectangle, or to Draw to
+  sketch over the screen with a pen or an arrow: the drawing goes into the
+  screenshot and travels with the task.
 - **One mark, two destinations.** Write the sentence first; the button you
   tap to send is the choice: **Comment** for the team, **Create Agent Task**
   for the agent.
@@ -286,7 +288,8 @@ off and everything else works:
 ```
 
 Every field beyond `id`, `comment` and `kind` is context for the agent, so
-store what you receive. The spec covers area captures (`elements[]`),
+store what you receive. The spec covers the shapes a capture can have
+(`shape`, `sketch`, `elements[]`),
 Full-detail fields and tasks created from a team note.
 
 ### What the server sends back

@@ -41,3 +41,49 @@ describe("hold to pin", () => {
     expect(index).toContain("<AnnoKitPinDot x={selection.x} y={selection.y} />");
   });
 });
+
+describe("draw mode", () => {
+  const sketchLayer = readFileSync(join(__dirname, "..", "src", "sketch-layer.tsx"), "utf8");
+  const overlay = readFileSync(join(__dirname, "..", "src", "aim-overlay.tsx"), "utf8");
+
+  it("the gesture pad serves every mode but element", () => {
+    expect(index).toMatch(/live && armed && aimMode !== "element" && !capture && !shooting && \(\s*<AnnoKitGesturePad/);
+  });
+
+  it("the sketch layer is in the screenshot: never hidden while shooting", () => {
+    const line = index.slice(index.lastIndexOf("\n", index.indexOf("<AnnoKitSketchLayer strokes={sketchSel")), index.indexOf("<AnnoKitSketchLayer strokes={sketchSel"));
+    expect(line).not.toContain("shooting");
+    expect(index).toContain("{(sketchSel || liveStroke) && (");
+  });
+
+  it("the live stroke is committed once per frame, not per touch sample", () => {
+    expect(index).toContain("strokeFrameRef.current = requestAnimationFrame(");
+    expect(index).toMatch(/liveStrokeRef\.current = liveStrokeRef\.current\s*\?\s*extendStroke/);
+  });
+
+  it("every way out of a gesture drops the live stroke and the sketch", () => {
+    const fn = (name: string) => {
+      const start = index.indexOf(`const ${name} = useCallback(`);
+      return index.slice(start, index.indexOf("}, [", start));
+    };
+    expect(fn("cancelAimGesture")).toContain("dropLiveStroke()");
+    expect(fn("clearAim")).toContain("dropLiveStroke()");
+    expect(fn("clearAim")).toContain("setSketchSel(null)");
+  });
+
+  it("the sketch layer reaches react-native-svg only through the shim", () => {
+    expect(sketchLayer).not.toContain('require("react-native-svg")');
+    expect(sketchLayer).toContain("svgParts()");
+    expect(sketchLayer).toMatch(/<Svg[^>]*pointerEvents="none"/);
+  });
+
+  it("the Draw segment is offered only when the svg peer can draw it", () => {
+    expect(overlay).toContain('drawAvailable && segment("draw"');
+    expect(index).toContain("drawAvailable={svgAvailable()}");
+  });
+
+  it("a sketch becomes a sketch capture with its strokes", () => {
+    expect(index).toContain('shape: "sketch"');
+    expect(index).toContain("sketch: sketchSel.sketch,");
+  });
+});

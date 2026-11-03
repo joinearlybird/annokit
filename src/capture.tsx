@@ -93,8 +93,9 @@ export function AnnoKitCaptureRoot({ armed, onAimStart, onAim, onSelect, onAimCa
 }
 
 /**
- * AREA MODE'S DRAWING SURFACE — a transparent layer over the app that owns
- * the drag, so the rectangle is drawn on the screen as it is.
+ * AREA AND DRAW MODE'S GESTURE SURFACE — a transparent layer over the app
+ * that owns the drag, so the rectangle or the stroke is drawn on the screen
+ * as it is.
  *
  * The capture root above claims the JS responder, which stops a tap from
  * reaching a button, but it cannot stop a NATIVE scroll view: its pan
@@ -108,22 +109,24 @@ export function AnnoKitCaptureRoot({ armed, onAimStart, onAim, onSelect, onAimCa
  * root: surveying is a drag across elements that are meant to be found
  * where they are.
  */
-export function AnnoKitAreaPad({
+export function AnnoKitGesturePad({
   rootRef,
   onAim,
   onSelect,
   onAimCancel,
+  testID = "annokit-area-pad",
 }: {
   rootRef: React.MutableRefObject<View | null>;
   onAim: Props["onAim"];
   onSelect: Props["onSelect"];
   onAimCancel: Props["onAimCancel"];
+  testID?: string;
 }) {
   const gesturing = useRef(false);
   return (
     <View
       style={StyleSheet.absoluteFill}
-      testID="annokit-area-pad"
+      testID={testID}
       onStartShouldSetResponder={(e) => {
         gesturing.current = true;
         onAim(e.nativeEvent.pageX, e.nativeEvent.pageY, rootRef.current);
@@ -142,8 +145,11 @@ export function AnnoKitAreaPad({
         gesturing.current = false;
         onAimCancel();
       }}
-      // Nothing else should take a rectangle half-drawn.
+      // Nothing else should take a rectangle or a stroke half-drawn.
       onResponderTerminationRequest={() => false}
     />
   );
 }
+
+/** The pad's older name. */
+export const AnnoKitAreaPad = AnnoKitGesturePad;

@@ -238,6 +238,12 @@ export interface AnnoKitPalette {
   // ── Aim chrome (drawn over the app, not over a sheet) ──────────────────
   /** The outline around the element being aimed at. */
   aimOutline: string;
+  /**
+   * Sketch ink (src/sketch-layer.tsx). Its own key, not `danger`: the
+   * agent prompt promises the drawing is "in red", and a retune of the
+   * destructive colour must not quietly change what the prompt says.
+   */
+  sketch: string;
 }
 
 /**
@@ -302,6 +308,7 @@ export const DARK_PALETTE: AnnoKitPalette = {
   dangerSoft: "#fca5a5",
 
   aimOutline: "rgba(255,255,255,0.9)",
+  sketch: "#ef4444",
 };
 
 /**
@@ -380,6 +387,7 @@ export const LIGHT_PALETTE: AnnoKitPalette = {
   dangerSoft: "#ef4444",
 
   aimOutline: "rgba(23,23,23,0.85)",
+  sketch: "#dc2626",
 };
 
 /** The palette for a resolved theme. Never null — there are only two. */

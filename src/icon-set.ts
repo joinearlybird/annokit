@@ -27,6 +27,9 @@
 import {
   ICON_AGENT,
   ICON_AREA,
+  ICON_ARROW,
+  ICON_DRAW,
+  ICON_UNDO,
   ICON_CHECK,
   ICON_CLOSE,
   ICON_COLLAPSE,
@@ -63,7 +66,10 @@ export type IconName =
   | "expand"
   | "minimize"
   | "refresh"
-  | "gear";
+  | "gear"
+  | "draw"
+  | "arrow"
+  | "undo";
 
 /** Lucide's drawing conventions, applied to every icon we render. */
 export const LUCIDE_VIEWBOX = "0 0 24 24";
@@ -91,6 +97,9 @@ export const LUCIDE_NAMES: Record<IconName, string> = {
   minimize: "minimize-2",
   refresh: "rotate-cw",
   gear: "settings",
+  draw: "pen-line",
+  arrow: "move-up-right",
+  undo: "undo-2",
 };
 
 /** The `d` attributes, in Lucide's own order. */
@@ -161,6 +170,13 @@ export const ICON_PATHS: Record<IconName, readonly string[]> = {
     "M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915",
     "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
   ],
+  // Draw mode's three controls on the armed-mode chip.
+  draw: [
+    "M12 20h9",
+    "M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z",
+  ],
+  arrow: ["M13 5H19V11", "M19 5L5 19"],
+  undo: ["M9 14 4 9l5-5", "M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"],
 };
 
 /**
@@ -188,6 +204,9 @@ export const ICON_GLYPHS: Record<IconName, string> = {
   minimize: ICON_MINIMIZE,
   refresh: ICON_REFRESH,
   gear: ICON_SETTINGS,
+  draw: ICON_DRAW,
+  arrow: ICON_ARROW,
+  undo: ICON_UNDO,
 };
 
 /** Every name the overlay can ask for — what the guard test iterates. */
