@@ -1,6 +1,7 @@
 import type { AnnotationReference } from "./attachments";
 import type { DeviceInfo } from "./device";
 import type { InspectorHit } from "./inspector";
+import type { CaptureShape } from "./shape";
 import type { ThreadMessage } from "./thread";
 
 /** A captured tap awaiting composition. */
@@ -24,6 +25,12 @@ export interface PendingCapture {
    * inside it (hit may be null: an area over empty space is the point).
    */
   areaRect?: { x: number; y: number; width: number; height: number };
+  /**
+   * What the capture is about (src/shape.ts): "point" for a held spot,
+   * "area" for a drawn rectangle, "sketch" for strokes. Absent means an
+   * element capture, or whatever `areaRect`/`sketch` say it is.
+   */
+  shape?: CaptureShape;
   /** Route at capture time. */
   routeName: string | null;
   /**
@@ -88,6 +95,8 @@ export interface ServerAnnotation {
    * when it is absent or cannot belong to the current window (src/push.ts).
    */
   boundingBox?: { x: number; y: number; width: number; height: number } | null;
+  /** The capture's shape, when the server kept what was sent (src/shape.ts). Absent = element. */
+  shape?: string;
   routeName?: string;
   /**
    * Owning-scroll-container offset at capture, when the server kept what

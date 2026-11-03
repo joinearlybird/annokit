@@ -11,6 +11,8 @@ import type { AnnotationReference } from "./attachments";
 import type { DeviceInfo } from "./device";
 import type { InspectorHit } from "./inspector";
 import type { OutputDetail } from "./prefs";
+import { captureBoundingBox, captureElementName, wireShape } from "./shape";
+import type { CaptureShape } from "./shape";
 import type { PendingCapture } from "./types";
 
 export interface AnnotationBody {
@@ -30,6 +32,13 @@ export interface AnnotationBody {
   x: number;
   y: number;
   boundingBox: { x: number; y: number; width: number; height: number };
+  /**
+   * What the annotation is about (src/shape.ts). OMITTED for an element
+   * capture — the shape every v1 server already stores — and "point",
+   * "area" or "sketch" otherwise. Optional and additive; a reader that does
+   * not know it sees an element at `boundingBox`, as before.
+   */
+  shape?: Exclude<CaptureShape, "element">;
   nearbyText?: string;
   /**
    * Flattened style of the touched view, as compact JSON. The wire name is
@@ -137,23 +146,19 @@ export function buildAnnotationBody(
     comment,
     kind: "feedback",
     platform: "native",
-    // An area over empty space has no element — "Area" is the honest name
-    // (the boundingBox carries the region); "Screen" stays the tap-found-
-    // nothing fallback.
-    element: hit?.element ?? (capture.areaRect ? "Area" : "Screen"),
+    // The name, the box and the shape agree by construction (src/shape.ts):
+    // an area's box is the drawn rectangle, a pinned spot's is zero-size at
+    // the finger, an element's is its frame; the name is the component
+    // found, else "Area" / "Screen" for what was captured over nothing.
+    element: captureElementName(capture),
     componentStack: hit?.componentStack ?? [],
     source: hit?.source,
     testID: hit?.testID,
     routeName: capture.routeName ?? undefined,
     x: capture.x,
     y: capture.y,
-    // An area capture's box is the DRAWN RECTANGLE — the region is the
-    // subject, whatever was sampled inside it.
-    boundingBox: capture.areaRect
-      ? capture.areaRect
-      : hit
-        ? { x: hit.frame.x, y: hit.frame.y, width: hit.frame.width, height: hit.frame.height }
-        : { x: capture.x, y: capture.y, width: 0, height: 0 },
+    boundingBox: captureBoundingBox(capture),
+    shape: wireShape(capture),
     nearbyText: hit?.nearbyText,
     computedStyles: safeJson(hit?.styles),
     accessibility: safeJson(hit?.accessibility),
@@ -176,7 +181,7 @@ export function buildAnnotationBody(
  *
  * WHAT SURVIVES AT EVERY LEVEL, and is therefore never a choice: the id,
  * the words, the kind and platform, the route, the position, the bounding
- * box, the scroll offset and the attachments. Those are what makes the task
+ * box, the shape, the scroll offset and the attachments. Those are what makes the task
  * a task — an annotation nobody can locate is not a lighter annotation, it
  * is a broken one. `element` stays too: it is the label the marker, the
  * queue row and the detail header all read.

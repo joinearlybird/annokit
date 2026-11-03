@@ -422,6 +422,32 @@ describe("aim tracker", () => {
   });
 });
 
+describe("pinning a spot", () => {
+  it("pin() commits a final, pinned selection with the element under it as context", async () => {
+    const seen: (AimSelection<AimHit> | null)[] = [];
+    const hit: AimHit = { element: "Card", frame: { x: 0, y: 0, width: 100, height: 100 } };
+    const tracker = createAimTracker<AimHit>({ inspect: async () => hit, onSelection: (s) => seen.push(s) });
+    tracker.pin(40, 50);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(seen).toEqual([{ x: 40, y: 50, hit, target: { frame: hit.frame, label: "Card" }, final: true, pinned: true }]);
+  });
+
+  it("select() never says pinned", async () => {
+    const seen: (AimSelection<AimHit> | null)[] = [];
+    const tracker = createAimTracker<AimHit>({ inspect: async () => null, onSelection: (s) => seen.push(s) });
+    tracker.select(1, 2);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(seen[0]).not.toHaveProperty("pinned");
+  });
+
+  it("anchors a pinned selection's chrome on the point and names the spot", () => {
+    const hit: AimHit = { element: "Card", frame: { x: 0, y: 0, width: 100, height: 100 } };
+    const pinned: AimSelection<AimHit> = { x: 40, y: 50, hit, target: { frame: hit.frame, label: "Card" }, final: true, pinned: true };
+    expect(aimAnchorTarget(pinned)).toEqual({ frame: { x: 40, y: 50, width: 0, height: 0 }, label: "this spot on Card" });
+    expect(aimAnchorTarget({ ...pinned, hit: null, target: null }).label).toBe("this spot");
+  });
+});
+
 describe("composer sheet metrics", () => {
   it("caps the sheet at ~40% of the window, leaving the rest of the app visible", () => {
     expect(composerSheetMaxHeight(844)).toBe(337);

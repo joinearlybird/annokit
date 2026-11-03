@@ -36,6 +36,7 @@ import { seg } from "./url";
 import type { AnnotationReference } from "./attachments";
 import { OVERLAY_POLL_INTERVAL_MS, shouldPoll } from "./poll";
 import type { PollState } from "./poll";
+import { captureBoundingBox, captureElementName, isCaptureShape, wireShape } from "./shape";
 import type { PendingCapture } from "./types";
 import { rememberViewer, viewerFromCreatedComment, viewerFromEcho } from "./viewer";
 
@@ -76,6 +77,8 @@ export interface Comment {
   x?: number;
   y?: number;
   boundingBox?: { x: number; y: number; width: number; height: number };
+  /** The capture's shape, when the server kept it (src/shape.ts). Absent = element. */
+  shape?: string;
   scroll?: { scrollViewTag?: number; offsetY: number; offsetX?: number };
   status: CommentStatus;
   author: CommentAuthor;
@@ -114,6 +117,8 @@ export interface CommentBody {
   x: number;
   y: number;
   boundingBox: { x: number; y: number; width: number; height: number };
+  /** "point" | "area" | "sketch"; omitted for an element capture (src/shape.ts). */
+  shape?: "point" | "area" | "sketch";
   scroll: { scrollViewTag?: number; offsetY: number; offsetX?: number };
   /**
    * Images pasted into the composer, uploaded as assets (src/paste.ts).
@@ -273,15 +278,17 @@ export function buildCommentBody(
     // Omitted entirely rather than sent empty: a field that is not there
     // cannot be mistaken for "this person has no name".
     ...(hint ? { authorName: hint } : {}),
-    element: hit?.element ?? "Screen",
+    // Same name, box and shape rules as an annotation (src/shape.ts): a
+    // note on an area carries the rectangle, a note on a held spot the
+    // point, so a task made from it later targets what the note was about.
+    element: captureElementName(capture),
     componentStack: hit?.componentStack ?? [],
     source: hit?.source,
     testID: hit?.testID,
     x: capture.x,
     y: capture.y,
-    boundingBox: hit
-      ? { x: hit.frame.x, y: hit.frame.y, width: hit.frame.width, height: hit.frame.height }
-      : { x: capture.x, y: capture.y, width: 0, height: 0 },
+    boundingBox: captureBoundingBox(capture),
+    shape: wireShape(capture),
     scroll: hit?.scroll ?? { offsetY: 0 },
     ...(references && references.length ? { references } : {}),
   };
@@ -296,19 +303,28 @@ export function commentToCapture(comment: Comment): PendingCapture {
   const box = comment.boundingBox;
   const x = typeof comment.x === "number" ? comment.x : (box?.x ?? 0);
   const y = typeof comment.y === "number" ? comment.y : (box?.y ?? 0);
+  const shape = isCaptureShape(comment.shape) ? comment.shape : undefined;
+  // A note's fallback names ("Screen", "Area", "Sketch") are not components:
+  // a task made from such a note has no hit, as the note had none.
+  const named = comment.element && !["Screen", "Area", "Sketch"].includes(comment.element);
   return {
     x,
     y,
-    hit: comment.element
+    hit: named
       ? {
-          element: comment.element,
+          element: comment.element!,
           componentStack: comment.componentStack ?? [],
+          // An area's or a spot's box is not the element's frame; the
+          // element's own frame was never stored, so the box stands in.
           frame: box ?? { x, y, width: 0, height: 0 },
           testID: comment.testID,
           source: comment.source,
           scroll: comment.scroll,
         }
       : null,
+    ...(shape && shape !== "element" ? { shape } : {}),
+    // An area note keeps its rectangle, so the task made from it is an area task too.
+    ...(shape === "area" && box ? { areaRect: { ...box } } : {}),
     routeName: comment.routeName ?? null,
     // Comments never captured one (see the v1 note above).
     screenshotUri: null,
