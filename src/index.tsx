@@ -25,7 +25,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { Animated, Easing, useWindowDimensions, View } from "react-native";
+import { Animated, Easing, PixelRatio, useWindowDimensions, View } from "react-native";
 import { forgetServerFlavor, fromAgentationList, serverFlavor } from "./agentation";
 import { fetchAgentConfig, forgetAgentRoute } from "./agent-config";
 import type { AgentConfig } from "./agent-config";
@@ -91,6 +91,9 @@ import {
   setScreenshotsEnabled,
 } from "./screenshot";
 import { readDevice } from "./device";
+import { AnnoKitBurnIn } from "./burn-in";
+import { nextMarkerNumber } from "./marker-hit";
+import { markerPositionTrusted } from "./anchor-registry";
 import { createHoldDetector } from "./hold";
 import { subscribeToShake } from "./shake";
 import type { AnnoKitTimeouts } from "./transport";
@@ -549,6 +552,11 @@ function AnnoKitRuntime({
   const [areaDraft, setAreaDraft] = useState<AimRect | null>(null);
   const [areaSel, setAreaSel] = useState<{ rect: AimRect; hits: InspectorHit[] } | null>(null);
   const [shooting, setShooting] = useState(false);
+  // The capture whose mark is drawn into the shot while the shutter is open
+  // (src/burn-in.tsx). Set in the same batch as `shooting`, so the layer
+  // mounts on the commit the chrome hides in.
+  const [burnIn, setBurnIn] = useState<PendingCapture | null>(null);
+  const captureStateRef = useRef<PendingCapture | null>(null);
   /**
    * The live capture's screenshot path, for the exits that cannot read
    * state: an unmount cleanup, and the endpoint-change teardown below.
@@ -1131,6 +1139,7 @@ function AnnoKitRuntime({
   // handler out from under a finger that is still down.
   const aimModeRef = useRef(aimMode);
   aimModeRef.current = aimMode;
+  captureStateRef.current = capture;
 
   const onAimStart = useCallback(
     (x: number, y: number) => {
@@ -1238,9 +1247,10 @@ function AnnoKitRuntime({
     return subscribeToShake(toggleArmed);
   }, [enabled, shakeToToggle, toggleArmed]);
 
-  // Confirm: the selection is already resolved, so this only has to take the
-  // screenshot and open the sheet. Arming ends here — the selection does
-  // NOT, because the sheet is designed to be read next to its highlight.
+  // Confirm: the selection is already resolved, so this only has to open
+  // the sheet (a screenshot, if wanted, is asked for from there). Arming
+  // ends here — the selection does NOT, because the sheet is designed to be
+  // read next to its highlight.
   const openComposer = useCallback(() => {
     if (capturingRef.current) return;
     // What the composer is about: an area (the rectangle is the subject,
@@ -1298,7 +1308,8 @@ function AnnoKitRuntime({
             onAgentSubmitted: refreshPending,
             onCommentSubmitted: refreshComments,
             dismiss: clearAim,
-            captureScreenshot: shootForHost,
+            // The host's shutter draws THIS capture's mark into the shot.
+            captureScreenshot: () => shootForHost(pendingCapture),
           }),
         );
         if (handled === "handled") {
@@ -1348,28 +1359,32 @@ function AnnoKitRuntime({
    * shot. Who OWNS the file is the caller's business — the built-in
    * composer's (captureScreenshotNow) or a headless host's (shootForHost).
    */
-  const shootScreen = useCallback(async (): Promise<string | null> => {
+  const shootScreen = useCallback(async (target: PendingCapture | null): Promise<string | null> => {
     if (!screenshotsAvailable()) return null;
+    // One batch: the chrome goes, the push snaps back, the mark appears.
+    setBurnIn(target);
     setShooting(true);
     try {
-      // Two frames for the opacity commit, then a settle window: a
-      // dismissing keyboard animates over roughly a quarter second, and a
-      // capture taken before it finishes has the keyboard in it. This is
-      // the one place the overlay deliberately makes the user wait, and it
-      // is still under a third of a second.
+      // Two frames for the opacity commit and the burn-in layer's layout,
+      // then a settle window: a dismissing keyboard animates over roughly a
+      // quarter second, and a capture taken before it finishes has the
+      // keyboard in it. This is the one place the overlay deliberately
+      // makes the user wait, and it is still under a third of a second.
       await nextFrames(2);
       await new Promise<void>((resolve) => setTimeout(resolve, CAPTURE_SETTLE_MS));
-      return await captureScreenUri();
+      // At one pixel per point on native (src/screenshot.ts).
+      return await captureScreenUri({ window: { width: windowWidth, height: windowHeight }, pixelRatio: PixelRatio.get() });
     } catch (e) {
       console.warn("[annokit] screenshot capture failed:", e);
       return null;
     } finally {
       setShooting(false);
+      setBurnIn(null);
     }
-  }, []);
+  }, [windowWidth, windowHeight]);
 
   const captureScreenshotNow = useCallback(async (): Promise<string | null> => {
-    const uri = await shootScreen();
+    const uri = await shootScreen(captureStateRef.current);
     if (!uri) return null;
     // The flow closed while the shutter was open — dismissed, or the
     // endpoint changed underneath it. Nothing downstream will ever see
@@ -1395,8 +1410,8 @@ function AnnoKitRuntime({
    * exit no helper sees, can still free what a host left behind.
    */
   const hostShotsRef = useRef(new Set<string>());
-  const shootForHost = useCallback(async (): Promise<string | null> => {
-    const uri = await shootScreen();
+  const shootForHost = useCallback(async (target: PendingCapture | null = null): Promise<string | null> => {
+    const uri = await shootScreen(target);
     if (uri) hostShotsRef.current.add(uri);
     return uri;
   }, [shootScreen]);
@@ -1469,7 +1484,9 @@ function AnnoKitRuntime({
   // already inside `appPushTranslation`, which answers 0 for an element that
   // is clear, a frame it does not believe, and a sheet that has not measured
   // itself yet.
-  const pushBy = sheetOpen
+  // At rest while a screenshot is taken: the sheet is hidden anyway, and the
+  // shot's coordinates must be the window's (src/burn-in.tsx).
+  const pushBy = sheetOpen && !shooting
     ? appPushTranslation({ frame: pushFrame, coveredTop, screen })
     : 0;
   // The latch (see `pushing` above), and the measurement that belongs to
@@ -1482,6 +1499,12 @@ function AnnoKitRuntime({
     } else if (pushBy > 0) setPushing(true);
   }, [sheetOpen, pushBy]);
   useEffect(() => {
+    if (shooting) {
+      // SNAP for the shutter too: a half-slid frame inside the settle
+      // window would put the burned-in mark somewhere the element is not.
+      pushAnim.setValue(0);
+      return;
+    }
     if (!sheetOpen) {
       // SNAP, do not animate, when the sheet is gone. The composer has no
       // exit animation — its Modal simply unmounts (a detail pane's slides
@@ -1500,7 +1523,7 @@ function AnnoKitRuntime({
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-  }, [sheetOpen, pushBy, pushAnim]);
+  }, [sheetOpen, pushBy, pushAnim, shooting]);
 
   // The aim chrome is placed in untranslated coordinates and then carried up
   // by the same transform, so its limits move with it (src/push.ts).
@@ -1602,14 +1625,14 @@ function AnnoKitRuntime({
                 is doing now.
               */}
               {/* The area rectangle: live while the drag draws it, kept after release. */}
-              {(areaDraft ?? areaSel?.rect) && <AnnoKitAreaBox rect={(areaDraft ?? areaSel?.rect)!} />}
+              {(areaDraft ?? areaSel?.rect) && !shooting && <AnnoKitAreaBox rect={(areaDraft ?? areaSel?.rect)!} />}
               {/*
                 Only when there is a frame with area. A position-only selection
                 has nothing to outline — the confirm button appearing at the tap
                 point is the feedback — and a degenerate box would point at
                 nothing.
               */}
-              {selection?.target && (
+              {selection?.target && !shooting && (
                 <AnnoKitAim
                   target={selection.target}
                   occludedTop={capture ? aimBounds.occludedTop : undefined}
@@ -1617,7 +1640,7 @@ function AnnoKitRuntime({
                 />
               )}
               {/* A held spot: the ring marks the point; any element outline above stays as context. */}
-              {selection?.final && selection.pinned && <AnnoKitPinDot x={selection.x} y={selection.y} />}
+              {selection?.final && selection.pinned && !shooting && <AnnoKitPinDot x={selection.x} y={selection.y} />}
               {/*
                 Markers are tappable only while IDLE: armed, they go inert so the
                 aim gesture reaches the capture root instead of a marker sitting
@@ -1646,6 +1669,14 @@ function AnnoKitRuntime({
                 taskCounts={taskCounts}
                 workingNoteIds={workingNoteIds}
               />
+              {/*
+                The shutter is open: the task being composed gets its own
+                outline and the number it will wear, drawn into the shot
+                beside the markers above (src/burn-in.tsx).
+              */}
+              {shooting && burnIn && (
+                <AnnoKitBurnIn capture={burnIn} number={nextMarkerNumber(pending, routeName, markerPositionTrusted)} />
+              )}
               {/*
                 `final` only: mid-drag the user is still surveying, and a button
                 chasing their finger is noise they cannot tap anyway. It appears
@@ -1681,7 +1712,7 @@ function AnnoKitRuntime({
               near the user's finger. The work carries on either way; the banner
               comes back when they are done.
             */}
-            {prefs.agentBanner && agentWork.count > 0 && !armed && !capture && (
+            {prefs.agentBanner && agentWork.count > 0 && !armed && !capture && !shooting && (
               <AnnoKitAgentBanner
                 activity={agentWork}
                 // One task in flight: open it. Several: the queue, which
@@ -1694,6 +1725,7 @@ function AnnoKitRuntime({
             )}
             <AnnoKitFab
               armed={armed}
+              hidden={shooting}
               pendingCount={pending.length}
               noteCount={openNoteCount(allComments)}
               working={agentWork.count > 0}

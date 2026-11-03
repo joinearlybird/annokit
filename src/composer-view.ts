@@ -72,13 +72,14 @@ export function captureIdentityLine(capture: IdentityCapture): string {
 /**
  * AVAILABLE IS NOT ATTACHED.
  *
- * The screenshot is taken EAGERLY, at confirm time, before the destination is
- * known — an agent task that arrives without its screenshot cannot be given
- * one afterwards, so the shot has to exist before the choice is made
- * (src/index.tsx, openComposer). That made `capture.screenshotUri` non-null
- * essentially always, and the sheet used to seed its toggle from exactly that
- * value — so "a screenshot EXISTS" and "the user WANTS it sent" were one
- * boolean.
+ * History: the screenshot used to be taken at confirm time, before the
+ * destination was known, so `capture.screenshotUri` was non-null
+ * essentially always, and the sheet seeded its toggle from exactly that
+ * value — "a screenshot EXISTS" and "the user WANTS it sent" were one
+ * boolean. Today the shot is taken when the switch goes on, and the two
+ * booleans are `canScreenshot` (one could be taken here) and the switch
+ * with its `screenshotUri` (one was, and rides along); the rules below are
+ * still what keeps them apart.
  *
  * That conflation is a bug with two faces. The visible one: `hasScreenshot`
  * was permanently true, so `attachmentControlsVisible` never hid anything and
@@ -87,7 +88,7 @@ export function captureIdentityLine(capture: IdentityCapture): string {
  * had asked for (product owner, device testing). The quieter one: every agent
  * task uploaded a screenshot whether or not the author wanted it.
  *
- * So the eager capture stays and the CHOICE starts off. Attaching is a tap.
+ * So the CHOICE starts off, and the shot follows the choice. Attaching is a tap.
  * Default-on for the agent's half was considered — screenshots are genuinely
  * useful context — and rejected: it would put the visibility signal back on a
  * default rather than on intent, which is the bug, and it makes the Team half

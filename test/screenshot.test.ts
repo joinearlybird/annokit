@@ -9,7 +9,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildScreenshotPart, captureScreenUri, screenshotsAvailable, setScreenshotsEnabled } from "../src/screenshot";
+import { buildScreenshotPart, captureOptionsFor, captureScreenUri, screenshotsAvailable, setScreenshotsEnabled } from "../src/screenshot";
 import { installReactNativeStub, installViewShotStub } from "./helpers/stubs";
 
 interface HostFormData {
@@ -151,6 +151,34 @@ describe("web part (Blob conversion)", () => {
   });
 });
 
+describe("captureOptionsFor — one pixel per point", () => {
+  const target = { window: { width: 402, height: 874 }, pixelRatio: 3 };
+
+  it("asks Android for the window's point size: its width/height are pixels", () => {
+    expect(captureOptionsFor("android", { window: { width: 411.4, height: 914.3 }, pixelRatio: 2.625 }))
+      .toEqual({ format: "png", quality: 0.9, width: 411, height: 914 });
+  });
+
+  it("asks iOS for points divided by the pixel ratio: its size is in points, rendered at device scale", () => {
+    expect(captureOptionsFor("ios", target)).toEqual({ format: "png", quality: 0.9, width: 134, height: 874 / 3 });
+  });
+
+  it("never resizes on the web, and asks for a data-uri there", () => {
+    expect(captureOptionsFor("web", target)).toEqual({ format: "png", quality: 0.9, result: "data-uri" });
+  });
+
+  it("sends no size for a target it cannot trust", () => {
+    const base = { format: "png", quality: 0.9 };
+    expect(captureOptionsFor("ios", undefined)).toEqual(base);
+    expect(captureOptionsFor("ios", null)).toEqual(base);
+    expect(captureOptionsFor("ios", { window: { width: NaN, height: 10 }, pixelRatio: 3 })).toEqual(base);
+    expect(captureOptionsFor("ios", { window: { width: 0, height: 10 }, pixelRatio: 3 })).toEqual(base);
+    expect(captureOptionsFor("android", { window: { width: 400, height: 800 }, pixelRatio: 0.5 })).toEqual(base);
+    expect(captureOptionsFor("windows", target)).toEqual(base);
+    expect(captureOptionsFor(null, target)).toEqual(base);
+  });
+});
+
 describe("capture options per target", () => {
   /** Re-import screenshot.ts against a stubbed view-shot (resolved at load). */
   async function withViewShot(captureScreen: unknown) {
@@ -178,13 +206,26 @@ describe("capture options per target", () => {
     }
   });
 
-  it("keeps the native capture options byte-identical (no result option)", async () => {
+  it("keeps the native capture options byte-identical (no result option) when the target is unknown", async () => {
     onPlatform("ios");
     const captureScreen = vi.fn().mockResolvedValue(FILE_URI);
     const { mod, restore } = await withViewShot(captureScreen);
     try {
       await expect(mod.captureScreenUri()).resolves.toBe(FILE_URI);
       expect(captureScreen).toHaveBeenCalledWith({ format: "png", quality: 0.9 });
+    } finally {
+      restore();
+      vi.resetModules();
+    }
+  });
+
+  it("forwards a 1x target into the native options", async () => {
+    onPlatform("android");
+    const captureScreen = vi.fn().mockResolvedValue(FILE_URI);
+    const { mod, restore } = await withViewShot(captureScreen);
+    try {
+      await expect(mod.captureScreenUri({ window: { width: 411, height: 914 }, pixelRatio: 2.6 })).resolves.toBe(FILE_URI);
+      expect(captureScreen).toHaveBeenCalledWith({ format: "png", quality: 0.9, width: 411, height: 914 });
     } finally {
       restore();
       vi.resetModules();

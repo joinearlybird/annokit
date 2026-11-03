@@ -146,7 +146,7 @@ describe("buildCaptureHelpers — the wiring", () => {
     const helpers = buildCaptureHelpers({ ...CAPTURE, canScreenshot: true }, d.deps);
     await expect(helpers.captureScreenshot()).resolves.toBe("file:///tmp/on-demand.png");
     await helpers.submitAgent("with a picture", { attachScreenshot: true });
-    expect(d.deps.transport.postForm).toHaveBeenCalledWith("/annotations/a1/screenshot", expect.anything());
+    expect(d.deps.transport.postForm).toHaveBeenCalledWith("/annotations/a1/screenshot?marks=badge%2Coutline", expect.anything());
   });
 
   it("does not fire the shutter for a capture that can never upload one", async () => {
@@ -214,7 +214,7 @@ describe("buildComposerSlotProps — the tier-2 slot contract", () => {
     );
     await props.captureScreenshot();
     await props.submitAgent("with a picture", { attachScreenshot: true });
-    expect(deps.transport.postForm).toHaveBeenCalledWith("/annotations/a2/screenshot", expect.anything());
+    expect(deps.transport.postForm).toHaveBeenCalledWith("/annotations/a2/screenshot?marks=badge%2Coutline", expect.anything());
   });
 
   it("hands the host the comment capability AND the sentence for its absence", () => {
