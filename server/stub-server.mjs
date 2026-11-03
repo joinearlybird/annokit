@@ -512,6 +512,16 @@ function shapeLines(a) {
     const inside = a.element && a.element !== "Area" ? ` containing ${a.element}` : ", with no component inside it";
     return [`  a region ${num(b.width)}×${num(b.height)} at (${num(b.x)}, ${num(b.y)})${inside}`];
   }
+  if (a.shape === "sketch") {
+    const strokes = Array.isArray(a.sketch?.strokes) ? a.sketch.strokes.length : 0;
+    const over = a.element && a.element !== "Sketch" ? ` over ${a.element}` : " over the screen";
+    const arrows = Array.isArray(a.sketch?.strokes) ? a.sketch.strokes.filter((s) => s?.tool === "arrow").length : 0;
+    const what = `${strokes} stroke${strokes === 1 ? "" : "s"}${arrows ? `, ${arrows} of them arrow${arrows === 1 ? "" : "s"}` : ""}`;
+    return [
+      `  the developer drew${over} in red: see the screenshot (${what}, ${num(b.width)}×${num(b.height)} at (${num(b.x)}, ${num(b.y)}))`,
+      "  the drawing is the request's shape — an arrow says where something should go, a circle says what is meant",
+    ];
+  }
   return [];
 }
 
@@ -1040,7 +1050,32 @@ function boundCapture(body) {
   // The capture's shape (docs/protocol.md, "Shapes"): one of the names the
   // protocol gives, or nothing — an element capture sends none.
   if (capture.shape !== undefined && !["element", "point", "area", "sketch"].includes(capture.shape)) delete capture.shape;
+  if (capture.sketch !== undefined) {
+    const sketch = cleanSketch(capture.sketch);
+    if (sketch) capture.sketch = sketch;
+    else delete capture.sketch;
+  }
   return capture;
+}
+
+/**
+ * A sketch's strokes (docs/protocol.md, "Shapes"), bounded, or null: up to
+ * 50 strokes of up to 1000 finite points, tools the protocol names.
+ */
+function cleanSketch(s) {
+  if (!s || typeof s !== "object" || !Array.isArray(s.strokes) || s.strokes.length === 0 || s.strokes.length > 50) return null;
+  const strokes = [];
+  for (const stroke of s.strokes) {
+    if (!stroke || (stroke.tool !== "pen" && stroke.tool !== "arrow") || !Array.isArray(stroke.points)) return null;
+    if (stroke.points.length === 0 || stroke.points.length > 1000) return null;
+    const points = [];
+    for (const p of stroke.points) {
+      if (!p || typeof p.x !== "number" || typeof p.y !== "number" || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
+      points.push({ x: p.x, y: p.y });
+    }
+    strokes.push({ tool: stroke.tool, points });
+  }
+  return { strokes };
 }
 
 /**

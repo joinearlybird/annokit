@@ -20,6 +20,7 @@ interface SvgProps {
   strokeWidth?: number;
   strokeLinecap?: "round" | "butt" | "square";
   strokeLinejoin?: "round" | "miter" | "bevel";
+  pointerEvents?: "none" | "auto" | "box-none" | "box-only";
   children?: unknown;
 }
 
@@ -27,6 +28,9 @@ interface PathProps {
   d: string;
   fill?: string;
   stroke?: string;
+  strokeWidth?: number;
+  strokeLinecap?: "round" | "butt" | "square";
+  strokeLinejoin?: "round" | "miter" | "bevel";
 }
 
 export interface SvgParts {

@@ -37,6 +37,8 @@ import type { AnnotationReference } from "./attachments";
 import { OVERLAY_POLL_INTERVAL_MS, shouldPoll } from "./poll";
 import type { PollState } from "./poll";
 import { captureBoundingBox, captureElementName, isCaptureShape, wireShape } from "./shape";
+import { readSketch } from "./sketch";
+import type { Sketch } from "./sketch";
 import type { PendingCapture } from "./types";
 import { rememberViewer, viewerFromCreatedComment, viewerFromEcho } from "./viewer";
 
@@ -79,6 +81,8 @@ export interface Comment {
   boundingBox?: { x: number; y: number; width: number; height: number };
   /** The capture's shape, when the server kept it (src/shape.ts). Absent = element. */
   shape?: string;
+  /** A sketch's strokes, when the server kept them (src/sketch.ts, `readSketch`). */
+  sketch?: unknown;
   scroll?: { scrollViewTag?: number; offsetY: number; offsetX?: number };
   status: CommentStatus;
   author: CommentAuthor;
@@ -119,6 +123,8 @@ export interface CommentBody {
   boundingBox: { x: number; y: number; width: number; height: number };
   /** "point" | "area" | "sketch"; omitted for an element capture (src/shape.ts). */
   shape?: "point" | "area" | "sketch";
+  /** A sketch's strokes (src/sketch.ts), with the shape. */
+  sketch?: Sketch;
   scroll: { scrollViewTag?: number; offsetY: number; offsetX?: number };
   /**
    * Images pasted into the composer, uploaded as assets (src/paste.ts).
@@ -289,6 +295,7 @@ export function buildCommentBody(
     y: capture.y,
     boundingBox: captureBoundingBox(capture),
     shape: wireShape(capture),
+    ...(capture.sketch ? { sketch: capture.sketch } : {}),
     scroll: hit?.scroll ?? { offsetY: 0 },
     ...(references && references.length ? { references } : {}),
   };
@@ -325,6 +332,8 @@ export function commentToCapture(comment: Comment): PendingCapture {
     ...(shape && shape !== "element" ? { shape } : {}),
     // An area note keeps its rectangle, so the task made from it is an area task too.
     ...(shape === "area" && box ? { areaRect: { ...box } } : {}),
+    // And a sketch note keeps its strokes.
+    ...(shape === "sketch" && readSketch(comment.sketch) ? { sketch: readSketch(comment.sketch)! } : {}),
     routeName: comment.routeName ?? null,
     // Comments never captured one (see the v1 note above).
     screenshotUri: null,

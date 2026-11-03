@@ -47,7 +47,12 @@ import {
   AnnoKitPinDot,
 } from "./aim-overlay";
 import { areaLabel, areaRectFrom, areaSamplePoints, dedupeAreaHits, isAreaMeaningful } from "./area";
-import { AnnoKitAreaPad, AnnoKitCaptureRoot } from "./capture";
+import { AnnoKitCaptureRoot, AnnoKitGesturePad } from "./capture";
+import type { AimMode } from "./aim-overlay";
+import { AnnoKitSketchLayer } from "./sketch-layer";
+import { appendStroke, extendStroke, finishStroke, isStrokeMeaningful, sketchBounds, sketchCentre, sketchLabel, startStroke, undoStroke } from "./sketch";
+import type { Sketch, SketchStroke, SketchTool } from "./sketch";
+import { svgAvailable } from "./svg";
 import { AnnoKitCommentView } from "./comment-view";
 import {
   COMMENTS_POLL_INTERVAL_MS,
@@ -542,10 +547,25 @@ function AnnoKitRuntime({
   const [commentsAvailable, setCommentsAvailable] = useState(true);
   const [openCommentId, setOpenCommentId] = useState<string | null>(null);
   const [selection, setSelection] = useState<AimSelection<InspectorHit> | null>(null);
-  // Aim mode: element (the default press-to-survey) or area (press-drag
-  // draws a rectangle — src/area.ts). The chip over the app switches them;
-  // switching, arming and disarming all start clean.
-  const [aimMode, setAimMode] = useState<"element" | "area">("element");
+  // Aim mode: element (the default press-to-survey), area (press-drag draws
+  // a rectangle — src/area.ts) or draw (strokes — src/sketch.ts). The chip
+  // over the app switches them; switching, arming and disarming all start
+  // clean.
+  const [aimMode, setAimMode] = useState<AimMode>("element");
+  // DRAW MODE. The stroke under the finger accumulates in a ref and is
+  // committed to state once per frame: touch events arrive at up to 120 Hz,
+  // and a setState per event would re-render the whole provider each time.
+  const [drawTool, setDrawTool] = useState<SketchTool>("pen");
+  const drawToolRef = useRef(drawTool);
+  drawToolRef.current = drawTool;
+  const liveStrokeRef = useRef<SketchStroke | null>(null);
+  const [liveStroke, setLiveStroke] = useState<SketchStroke | null>(null);
+  const strokeFrameRef = useRef<number | null>(null);
+  // The committed strokes, their bounds and what was found under them; it
+  // survives into the composer the way `areaSel` does, so the drawing is in
+  // the screenshot and in the task.
+  const [sketchSel, setSketchSel] = useState<{ sketch: Sketch; rect: AimRect; hits: InspectorHit[] } | null>(null);
+  const sketchSeqRef = useRef(0);
   const areaOriginRef = useRef<{ x: number; y: number } | null>(null);
   // The capture root's view, which area mode's pad hit-tests through.
   const captureRootRef = useRef<View | null>(null);
@@ -1147,9 +1167,53 @@ function AnnoKitRuntime({
     },
     [hold],
   );
+  /** Commit the live stroke to state, at most once per frame. */
+  const scheduleStrokeFrame = useCallback(() => {
+    if (strokeFrameRef.current !== null) return;
+    strokeFrameRef.current = requestAnimationFrame(() => {
+      strokeFrameRef.current = null;
+      setLiveStroke(liveStrokeRef.current);
+    });
+  }, []);
+  const dropLiveStroke = useCallback(() => {
+    liveStrokeRef.current = null;
+    if (strokeFrameRef.current !== null) {
+      cancelAnimationFrame(strokeFrameRef.current);
+      strokeFrameRef.current = null;
+    }
+    setLiveStroke(null);
+  }, []);
+  useEffect(() => () => dropLiveStroke(), [dropLiveStroke]);
+
+  /**
+   * What is under a sketch: the Area approach, verbatim — the centre gets
+   * the full capture treatment, the inset corners only add names. Guarded
+   * by a sequence so a slow answer for two strokes cannot land after three.
+   */
+  const resolveSketch = useCallback((sketch: Sketch) => {
+    const rect = sketchBounds(sketch);
+    const seq = ++sketchSeqRef.current;
+    void (async () => {
+      const [center, ...corners] = areaSamplePoints(rect);
+      const centerHit = await inspectAtPoint(rootViewRef.current, center.x, center.y, skipRef.current, { quiet: true });
+      const cornerHits = await Promise.all(
+        corners.map((pt) => inspectAtPoint(rootViewRef.current, pt.x, pt.y, skipRef.current, { survey: true, quiet: true })),
+      );
+      if (seq !== sketchSeqRef.current) return;
+      setSketchSel({ sketch, rect, hits: dedupeAreaHits([centerHit, ...cornerHits]) });
+    })();
+  }, []);
+
   const onAim = useCallback(
     (x: number, y: number, rootRef: unknown) => {
       rootViewRef.current = rootRef;
+      if (aimModeRef.current === "draw") {
+        liveStrokeRef.current = liveStrokeRef.current
+          ? extendStroke(liveStrokeRef.current, { x, y })
+          : startStroke(drawToolRef.current, { x, y });
+        scheduleStrokeFrame();
+        return;
+      }
       if (aimModeRef.current === "area") {
         if (!areaOriginRef.current) areaOriginRef.current = { x, y };
         setAreaSel(null);
@@ -1159,13 +1223,22 @@ function AnnoKitRuntime({
       hold.move(x, y);
       tracker.aim(x, y);
     },
-    [tracker, hold],
+    [tracker, hold, scheduleStrokeFrame],
   );
   const onSelect = useCallback(
     (x: number, y: number, rootRef: unknown) => {
       rootViewRef.current = rootRef;
       // A hold already pinned this spot: the release is spoken for.
       if (aimModeRef.current === "element" && hold.up()) return;
+      if (aimModeRef.current === "draw") {
+        const stroke = liveStrokeRef.current ? extendStroke(liveStrokeRef.current, { x, y }) : null;
+        dropLiveStroke();
+        // A wobbly tap is not a drawing — same floor as Area mode.
+        if (!stroke || !isStrokeMeaningful(stroke)) return;
+        const next = appendStroke(sketchSel?.sketch ?? { strokes: [] }, finishStroke(stroke));
+        if (next) resolveSketch(next);
+        return;
+      }
       if (aimModeRef.current === "area") {
         const origin = areaOriginRef.current;
         areaOriginRef.current = null;
@@ -1200,8 +1273,19 @@ function AnnoKitRuntime({
       }
       tracker.select(x, y);
     },
-    [tracker, hold],
+    [tracker, hold, sketchSel, dropLiveStroke, resolveSketch],
   );
+
+  /** Undo the last stroke; the last one gone clears the sketch. */
+  const undoLastStroke = useCallback(() => {
+    if (!sketchSel) return;
+    const rest = undoStroke(sketchSel.sketch);
+    if (rest) resolveSketch(rest);
+    else {
+      sketchSeqRef.current++;
+      setSketchSel(null);
+    }
+  }, [sketchSel, resolveSketch]);
 
   /** The system took a gesture away: nothing was aimed at or drawn. */
   const cancelAimGesture = useCallback(() => {
@@ -1209,7 +1293,8 @@ function AnnoKitRuntime({
     tracker.clear();
     areaOriginRef.current = null;
     setAreaDraft(null);
-  }, [tracker, hold]);
+    dropLiveStroke();
+  }, [tracker, hold, dropLiveStroke]);
 
   /** Everything aim-related, back to zero — every mode, every stage. */
   const clearAim = useCallback(() => {
@@ -1218,11 +1303,14 @@ function AnnoKitRuntime({
     areaOriginRef.current = null;
     setAreaDraft(null);
     setAreaSel(null);
-  }, [tracker, hold]);
+    dropLiveStroke();
+    sketchSeqRef.current++;
+    setSketchSel(null);
+  }, [tracker, hold, dropLiveStroke]);
 
-  const toggleAimMode = useCallback(() => {
+  const chooseAimMode = useCallback((mode: AimMode) => {
     clearAim();
-    setAimMode((m) => (m === "element" ? "area" : "element"));
+    setAimMode(mode);
   }, [clearAim]);
 
   /**
@@ -1265,6 +1353,17 @@ function AnnoKitRuntime({
         extraHits: extraHits.length > 0 ? extraHits : undefined,
         areaRect: areaSel.rect,
         shape: "area",
+      };
+    } else if (sketchSel) {
+      const centre = sketchCentre(sketchSel.sketch);
+      const [primaryHit, ...extraHits] = sketchSel.hits;
+      plan = {
+        x: centre.x,
+        y: centre.y,
+        hit: primaryHit ?? null,
+        extraHits: extraHits.length > 0 ? extraHits : undefined,
+        sketch: sketchSel.sketch,
+        shape: "sketch",
       };
     } else if (selection?.final) {
       // A pinned spot is about the POINT; the element under it rides as context.
@@ -1327,6 +1426,7 @@ function AnnoKitRuntime({
   }, [
     selection,
     areaSel,
+    sketchSel,
     routeName,
     // The headless seam's closures — sessionId especially: agentation
     // compat swaps it after the handshake, and a stale capture posting
@@ -1601,12 +1701,13 @@ function AnnoKitRuntime({
             rectangle cannot scroll a list underneath (src/capture.tsx).
             Before the chrome below, which stays tappable on top of it.
           */}
-          {live && armed && aimMode === "area" && !capture && !shooting && (
-            <AnnoKitAreaPad
+          {live && armed && aimMode !== "element" && !capture && !shooting && (
+            <AnnoKitGesturePad
               rootRef={captureRootRef}
               onAim={onAim}
               onSelect={onSelect}
               onAimCancel={cancelAimGesture}
+              testID={aimMode === "draw" ? "annokit-draw-pad" : "annokit-area-pad"}
             />
           )}
           {live && (
@@ -1626,6 +1727,15 @@ function AnnoKitRuntime({
               */}
               {/* The area rectangle: live while the drag draws it, kept after release. */}
               {(areaDraft ?? areaSel?.rect) && !shooting && <AnnoKitAreaBox rect={(areaDraft ?? areaSel?.rect)!} />}
+              {/*
+                The sketch: the strokes so far and the one under the finger.
+                NOT hidden while shooting — the drawing is what the screenshot
+                is for (src/burn-in.tsx); the pad above is unmounted then, so
+                nothing can be added mid-shot.
+              */}
+              {(sketchSel || liveStroke) && (
+                <AnnoKitSketchLayer strokes={sketchSel?.sketch.strokes ?? []} live={liveStroke} />
+              )}
               {/*
                 Only when there is a frame with area. A position-only selection
                 has nothing to outline — the confirm button appearing at the tap
@@ -1682,14 +1792,16 @@ function AnnoKitRuntime({
                 chasing their finger is noise they cannot tap anyway. It appears
                 the moment they lift.
               */}
-              {(selection?.final || areaSel) && !capture && !shooting && (
+              {(selection?.final || areaSel || sketchSel) && !capture && !shooting && (
                 <AnnoKitAimConfirm
-                  // Anchored to the area rectangle in area mode; otherwise to
-                  // the live selection.
+                  // Anchored to the area rectangle in area mode, the sketch's
+                  // bounds in draw mode; otherwise to the live selection.
                   target={
                     areaSel
                       ? { frame: areaSel.rect, label: areaLabel(areaSel.rect) }
-                      : aimAnchorTarget(selection!)
+                      : sketchSel
+                        ? { frame: sketchSel.rect, label: sketchLabel(sketchSel.sketch) }
+                        : aimAnchorTarget(selection!)
                   }
                   confirmLabel="Annotate"
                   onConfirm={openComposer}
@@ -1703,7 +1815,15 @@ function AnnoKitRuntime({
           <>
             {/* Mode chip: chrome, so OUTSIDE the capture root — it must stay tappable while armed. */}
             {armed && !capture && !shooting && (
-              <AnnoKitModeToggle mode={aimMode} onToggle={toggleAimMode} />
+              <AnnoKitModeToggle
+                mode={aimMode}
+                onMode={chooseAimMode}
+                drawAvailable={svgAvailable()}
+                drawTool={drawTool}
+                onDrawTool={setDrawTool}
+                canUndo={!!sketchSel}
+                onUndoStroke={undoLastStroke}
+              />
             )}
             {/*
               The agent is working. Hidden while ARMED or composing: aiming is a

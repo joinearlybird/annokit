@@ -47,9 +47,10 @@ describe("captureBoundingBox", () => {
     expect(captureBoundingBox({ x: 84, y: 189, hit: null })).toEqual({ x: 84, y: 189, width: 0, height: 0 });
   });
 
-  it("is the stroke bounds for a sketch, when the caller supplies them", () => {
-    expect(captureBoundingBox({ x: 1, y: 2, sketch: { strokes: [{}] }, sketchRect: RECT })).toEqual(RECT);
-    // Without bounds a sketch falls back like an element would.
+  it("is the stroke bounds for a sketch, padded by half the stroke width", () => {
+    const sketch = { strokes: [{ tool: "pen", points: [{ x: 40, y: 300 }, { x: 280, y: 460 }] }] };
+    expect(captureBoundingBox({ x: 1, y: 2, sketch })).toEqual({ x: 38.5, y: 298.5, width: 243, height: 163 });
+    // A sketch that cannot be read falls back like an element would.
     expect(captureBoundingBox({ x: 1, y: 2, sketch: { strokes: [{}] }, hit: HIT })).toEqual(FRAME);
   });
 

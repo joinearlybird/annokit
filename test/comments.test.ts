@@ -175,6 +175,18 @@ describe("buildCommentBody", () => {
     expect(empty.shape).toBe("area");
   });
 
+  it("carries a sketch note's strokes, and gives them back as a sketch capture", () => {
+    const sketch = { strokes: [{ tool: "pen" as const, points: [{ x: 40, y: 300 }, { x: 280, y: 460 }] }] };
+    const sent = wire(buildCommentBody({ ...CAPTURE, sketch }, "like this"));
+    expect(sent.shape).toBe("sketch");
+    expect(sent.sketch).toEqual(sketch);
+    expect(sent.boundingBox).toEqual({ x: 38.5, y: 298.5, width: 243, height: 163 });
+    const back = commentToCapture({ ...COMMENT, shape: "sketch", sketch, boundingBox: sent.boundingBox as { x: number; y: number; width: number; height: number } });
+    expect(back.shape).toBe("sketch");
+    expect(back.sketch).toEqual(sketch);
+    expect(commentToCapture({ ...COMMENT, shape: "sketch", sketch: { strokes: [{ tool: "laser", points: [] }] } })).not.toHaveProperty("sketch");
+  });
+
   it("carries a held spot as a point with a zero-size box", () => {
     const sent = wire(buildCommentBody({ ...CAPTURE, shape: "point" }, "here"));
     expect(sent.shape).toBe("point");
