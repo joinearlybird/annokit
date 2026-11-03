@@ -19,6 +19,7 @@
  */
 
 import { splitTaskBody } from "./message-task";
+import { finishedWord, readIntent } from "./intent";
 import type { ServerAnnotation } from "./types";
 
 export type RunOutcome = "running" | "done" | "failed" | "stopped";
@@ -134,10 +135,10 @@ const UNDO_WORD: Record<RunOutcome, string> = {
  * One run, in two lines: who ran it ("Codex · gpt-5.6-terra · high") and
  * how it went ("Done · 2 files · 1m 40s"). The tone colours the second.
  */
-export function runLines(run: TaskRun): { who: string; how: string; tone: "ok" | "busy" | "bad" | "muted" } {
+export function runLines(run: TaskRun, doneWord?: string): { who: string; how: string; tone: "ok" | "busy" | "bad" | "muted" } {
   const who = [run.agent.label ?? run.agent.id, run.model, run.effort].filter(Boolean).join(" · ");
   const files = run.files?.length ? `${run.files.length} file${run.files.length === 1 ? "" : "s"}` : null;
-  const word = (run.kind === "undo" ? UNDO_WORD : OUTCOME_WORD)[run.outcome];
+  const word = run.kind !== "undo" && run.outcome === "done" && doneWord ? doneWord : (run.kind === "undo" ? UNDO_WORD : OUTCOME_WORD)[run.outcome];
   const how = [word, run.resumed ? "continued" : null, files, runDuration(run)].filter(Boolean).join(" · ");
   // An undo that worked is the task's work gone: quiet, not a success to celebrate.
   const tone = run.outcome === "done" && run.kind === "undo" ? "muted" : run.outcome === "done" ? "ok" : run.outcome === "running" ? "busy" : run.outcome === "failed" ? "bad" : "muted";
@@ -195,7 +196,8 @@ export function doneRow(a: ServerAnnotation): DoneRow {
     const status = a.status ? a.status.charAt(0).toUpperCase() + a.status.slice(1) : "Done";
     return { id: a.id, text, how: status, tone: "muted", ...(at ? { at } : {}) };
   }
-  const { who, how, tone } = runLines(last);
+  // A question's run ended in an answer, not a change.
+  const { who, how, tone } = runLines(last, finishedWord(readIntent(a)));
   // The newest title any run gave: a failed re-run says nothing new about
   // what the task became, and an undo names no change of its own.
   const title = [...runs].reverse().find((r) => r.title && r.kind !== "undo")?.title;
@@ -240,6 +242,8 @@ export type UndoAction =
 
 export function taskUndoAction(a: ServerAnnotation, supported: boolean): UndoAction | null {
   if (!supported) return null;
+  // A question changed nothing: there is nothing to take back.
+  if (readIntent(a) === "question") return null;
   if (a.undoRequested === true) return { kind: "undoing", label: "Undoing…", enabled: false };
   if (!isFinishedTask(a)) return null;
   if (typeof a.undoneAt === "string" && a.undoneAt) {

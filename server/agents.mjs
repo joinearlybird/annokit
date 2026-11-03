@@ -18,6 +18,11 @@
  * where it has none, by the credentials it reads. /agent reports it as
  * `connected`, and the app offers only connected agents.
  *
+ * QUESTIONS RUN READ-ONLY where the CLI can: `opts.readOnly` in `args`
+ * gives Claude Code the read tools only (and no acceptEdits) and Codex the
+ * read-only sandbox. `readOnlyArgs: true` marks the providers that honour
+ * it; the stub says so when one does not, and the prompt still asks.
+ *
  * PICTURES. `images` in `args` is the paths of the task's screenshots on
  * disk. Codex takes them on the command line (-i, on a fresh run and a
  * resumed one); Claude Code opens a path the prompt names with its Read
@@ -51,6 +56,14 @@ import { join } from "node:path";
 
 export const AGENT_TOOLS = (process.env.AGENT_TOOLS ?? "Read Edit Write Glob Grep").split(/\s+/).filter(Boolean);
 export const AGENT_SANDBOX = process.env.AGENT_SANDBOX ?? "workspace-write";
+/**
+ * The tools a QUESTION runs with: read and search, nothing that writes. A
+ * question wants an answer in the thread (docs/protocol.md, "Questions"),
+ * and an agent that cannot edit cannot answer it with an edit. Overridable
+ * like AGENT_TOOLS, so a CLI whose tool names change is fixable in place.
+ */
+export const AGENT_READ_TOOLS = (process.env.AGENT_READ_TOOLS ?? "Read Glob Grep").split(/\s+/).filter(Boolean);
+const CLAUDE_WRITE_TOOLS = ["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"];
 
 /** Every JSON object on a line of `text`, skipping anything that is not one. */
 function events(text) {
@@ -100,11 +113,12 @@ export const PROVIDERS = {
     bins: ["claude"],
     // STREAMED, so the steps show while it works: one JSON event per line,
     // tool calls among them, the answer last.
-    args: (prompt, dir, model, extra, effort, session) => [
+    args: (prompt, dir, model, extra, effort, session, images = [], opts = {}) => [
       "-p", prompt,
       "--output-format", "stream-json", "--verbose",
-      "--allowedTools", ...AGENT_TOOLS,
-      "--permission-mode", "acceptEdits",
+      ...(opts.readOnly
+        ? ["--allowedTools", ...AGENT_READ_TOOLS, "--disallowedTools", ...CLAUDE_WRITE_TOOLS, "--permission-mode", "default"]
+        : ["--allowedTools", ...AGENT_TOOLS, "--permission-mode", "acceptEdits"]),
       ...(model ? ["--model", model] : []),
       ...(effort ? ["--effort", effort] : []),
       ...(session?.mode === "start" ? ["--session-id", session.id] : []),
@@ -112,6 +126,7 @@ export const PROVIDERS = {
     ],
     // The server picks the id (a UUID) and hands it over at the start.
     resumable: "own-id",
+    readOnlyArgs: true,
     // `claude --help`: --effort <level>.
     efforts: ["low", "medium", "high", "xhigh", "max"],
     read: (stdout) => replyFrom(stdout, () => null),
@@ -128,12 +143,12 @@ export const PROVIDERS = {
   codex: {
     label: "Codex",
     bins: ["codex"],
-    args: (prompt, dir, model, extra, effort, session, images = []) => session?.mode === "resume"
+    args: (prompt, dir, model, extra, effort, session, images = [], opts = {}) => session?.mode === "resume"
       // `exec resume` takes neither --sandbox nor -C: the sandbox goes in as
       // config, and the directory is the process's own (the server's cwd).
       ? [
         "exec", "resume", session.id, prompt,
-        "-c", `sandbox_mode="${AGENT_SANDBOX}"`,
+        "-c", `sandbox_mode="${opts.readOnly ? "read-only" : AGENT_SANDBOX}"`,
         "--skip-git-repo-check",
         ...(model ? ["-m", model] : []),
         ...(effort ? ["-c", `model_reasoning_effort="${effort}"`] : []),
@@ -141,7 +156,7 @@ export const PROVIDERS = {
       ]
       : [
         "exec", prompt,
-        "--sandbox", AGENT_SANDBOX,
+        "--sandbox", opts.readOnly ? "read-only" : AGENT_SANDBOX,
         "-C", dir,
         ...images.flatMap((path) => ["-i", path]),
         // Parallel runs share session-restore files without this, and a
@@ -154,6 +169,7 @@ export const PROVIDERS = {
       ],
     // Codex makes its own id and prints it at the start: "session id: <uuid>".
     resumable: "printed",
+    readOnlyArgs: true,
     sessionFrom: (stderr) => /session id:\s*([0-9a-f-]{36})/i.exec(stderr)?.[1] ?? null,
     // Its model list says which efforts each model takes (codexModels);
     // these are the ones every current model does.

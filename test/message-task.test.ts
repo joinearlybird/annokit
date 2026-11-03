@@ -416,6 +416,16 @@ describe("making the task", () => {
   });
 });
 
+describe("a question's lifecycle", () => {
+  it("reads Answered once finished, and like any task before that", () => {
+    expect(taskLifecycleLabel({ status: "sent", intent: "question" })).toBe("Answered");
+    expect(taskLifecycleLabel({ status: "resolved", intent: "question" })).toBe("Answered");
+    expect(taskLifecycleLabel({ status: "pending", intent: "question" })).toBe("Waiting to be sent");
+    expect(taskLifecycleLabel({ status: "working", intent: "question" })).toBe("Working");
+    expect(taskLifecycleLabel({ status: "sent" })).toBe("With the agent");
+  });
+});
+
 describe("the mark on a bubble", () => {
   const task = { id: "ann-1", sourceCommentId: "c1", sourceMessageIds: ["m2", "m3"] };
 

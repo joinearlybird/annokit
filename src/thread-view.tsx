@@ -56,6 +56,7 @@ import {
   taskReopenLabel,
 } from "./message-task";
 import { detailSendLabel } from "./queue-list";
+import { readIntent } from "./intent";
 import { taskProgress } from "./agent-activity";
 import { readRuns, runLines, taskUndoAction } from "./runs";
 import { serverSupportsUndo } from "./handshake";
@@ -344,11 +345,13 @@ export function AnnoKitThreadView({
   const reopenLabel = taskReopenLabel(annotation);
   const progress = taskProgress(annotation);
   const runs = readRuns(annotation.runs);
+  const intent = readIntent(annotation);
   const handOverAction = detailSendLabel({
     status: annotation.status,
     reopened,
     sending: handingOver,
     agentBusy,
+    intent,
   });
   const unseenLabel = newReplyLabel(unseen);
   const undoAction = taskUndoAction(annotation, serverSupportsUndo());
@@ -552,6 +555,11 @@ export function AnnoKitThreadView({
             >
               <AnnoKitIcon name="agent" size={11} color={p.agentText} />
               <Text style={styles.reopenedText}>{reopenLabel} — waiting to be sent again</Text>
+            </View>
+          )}
+          {intent === "question" && (
+            <View style={styles.reopened} accessibilityLabel="A question: the agent answers it and changes nothing" testID="annokit-thread-intent">
+              <Text style={styles.reopenedText}>? Question — the agent answers, it changes nothing</Text>
             </View>
           )}
           <Text style={styles.originalText}>{taskParts.request}</Text>

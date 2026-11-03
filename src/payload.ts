@@ -12,6 +12,7 @@ import type { DeviceInfo } from "./device";
 import type { InspectorHit } from "./inspector";
 import type { OutputDetail } from "./prefs";
 import { captureBoundingBox, captureElementName, wireShape } from "./shape";
+import type { TaskIntent } from "./intent";
 import type { CaptureShape } from "./shape";
 import type { Sketch } from "./sketch";
 import type { PendingCapture } from "./types";
@@ -93,6 +94,13 @@ export interface AnnotationBody {
    * Model and effort absent: that agent's defaults.
    */
   agent?: { id: string; model?: string; effort?: string };
+  /**
+   * What the task wants (src/intent.ts): an answer, not a change, when
+   * "question". Optional and additive; absent = fix. Sent only when it is
+   * a question, and never trimmed by Output Detail — it is not context, it
+   * is the request's kind.
+   */
+  intent?: TaskIntent;
   /**
    * The device the capture was made on (src/device.ts). Optional and
    * additive: platform, OS version, window size in points, pixel ratio,

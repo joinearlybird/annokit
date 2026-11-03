@@ -29,6 +29,8 @@
 
 import type { Comment } from "./comments";
 import { destinationBadge } from "./destination";
+import { intentBadge, readIntent } from "./intent";
+import type { TaskIntent } from "./intent";
 import { shapeSubject } from "./shape";
 import type { DestinationPalette } from "./destination";
 import { splitTaskBody, taskOriginLine, taskReopenLabel } from "./message-task";
@@ -49,6 +51,8 @@ export interface QueueRow {
   badgeColor: string;
   /** Lifecycle word, when the item has one worth showing. */
   status?: string;
+  /** "Question" on a task that wants an answer, not a change (src/intent.ts). */
+  intentLabel?: string;
   /**
    * The team note this task was made from, when it was. The row shows a
    * quiet "From a team note" line that opens the discussion — the reverse
@@ -150,6 +154,7 @@ export function buildTaskRows(
       // is what this whole panel is, so labelling every row "Pending" would
       // be a column of noise with the one thing that matters hidden in it.
       status: working ? "Working…" : taskReopenLabel(a),
+      ...(intentBadge(readIntent(a)) ? { intentLabel: intentBadge(readIntent(a))!.label } : {}),
       sourceCommentId: a.sourceCommentId,
       originLabel: taskOriginLine(a),
       working,
@@ -310,6 +315,8 @@ export function detailSendLabel(state: {
   reopened?: boolean;
   sending?: boolean;
   agentBusy?: boolean;
+  /** A question is asked, not sent: the words change, the action does not. */
+  intent?: TaskIntent;
 }): { label: string; enabled: boolean } {
   if (state.sending) return { label: "Sending…", enabled: false };
   // Anything that is not pending is with the agent (or dismissed): there is
@@ -322,6 +329,9 @@ export function detailSendLabel(state: {
   // A DIFFERENT task is in flight — see sendLabel for why a second one may
   // not start.
   if (state.agentBusy) return { label: "Agent is working…", enabled: false };
+  if (state.intent === "question") {
+    return { label: state.reopened ? "Send follow-up to agent" : "Ask the agent", enabled: true };
+  }
   return {
     label: state.reopened ? "Send refinement to agent" : "Send to agent",
     enabled: true,

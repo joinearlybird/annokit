@@ -88,6 +88,11 @@ describe("outbound: our body → their Annotation", () => {
     });
   });
 
+  it("keeps their intent for a question task: ours is not theirs", () => {
+    const body = { ...buildAnnotationBody(CAPTURE, "why blue?", "q-id"), intent: "question" as const };
+    expect((toAgentationAnnotation(body, 1) as unknown as { intent?: string }).intent).toBe("change");
+  });
+
   it("never invents fields their schema lacks", () => {
     const body = buildAnnotationBody(CAPTURE, "x", "our-id");
     const theirs = toAgentationAnnotation(body, 1) as unknown as Record<string, unknown>;

@@ -61,6 +61,7 @@ import {
   MARKER_SIZE,
   combineMarkers,
   markerAppearance,
+  markerBadge,
   markerTouchPadding,
   markerWorking,
   markersInteractive,
@@ -509,7 +510,9 @@ function MarkerButton({
             }${working ? ". The agent is working on one of its tasks" : ""}`
           : working
             ? `Open agent task ${marker.number} — the agent is working on it`
-            : `Open agent task ${marker.number} — the agent will make this change`
+            : markerBadge(marker)
+              ? `Open agent task ${marker.number} — a question; the agent answers it and changes nothing`
+              : `Open agent task ${marker.number} — the agent will make this change`
       }
       onPress={onPress}
       style={({ pressed }) => [styles.hitbox, hitboxPosition(marker), pressed && styles.pressed]}
@@ -562,6 +565,12 @@ function MarkerDot({
         */}
         {!!taskCount && taskCount > 0 && (
           <View style={styles.taskPip} pointerEvents="none" testID="annokit-marker-task-pip" />
+        )}
+        {/* A question: the task wants an answer, not a change (src/intent.ts). */}
+        {markerBadge(marker) && (
+          <View style={[styles.questionBadge, { backgroundColor: look.fill, borderColor: look.border }]} pointerEvents="none" testID="annokit-marker-question">
+            <Text style={[styles.questionBadgeText, { color: look.ink }]}>{markerBadge(marker)}</Text>
+          </View>
         )}
       </View>
     </>
@@ -715,6 +724,23 @@ const useStyles = themedStyles((p) => ({
     backgroundColor: p.agent,
     borderWidth: 1,
     borderColor: p.agentEdge,
+  },
+  /** "?" on a question task's corner: one glyph at 11pt stays legible where a numeral would not. */
+  questionBadge: {
+    position: "absolute",
+    top: -5,
+    right: -6,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  questionBadgeText: {
+    fontSize: 8,
+    lineHeight: 10,
+    fontWeight: "800",
   },
   pressed: {
     opacity: 0.7,

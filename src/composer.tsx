@@ -118,6 +118,10 @@ import type { SubmitDestination } from "./destination";
 import type { AnnoKitConfig } from "./env";
 import { AnnoKitIcon } from "./icon";
 import { AgentPill } from "./agent-pill";
+import { IntentToggle } from "./intent-toggle";
+import { serverFlavor } from "./agentation";
+import { intentPlaceholder, intentSubmitA11y, intentSubmitLabel } from "./intent";
+import type { TaskIntent } from "./intent";
 import { AnnoKitSettings } from "./settings";
 import { taskRun } from "./agent-config";
 import type { AgentConfig } from "./agent-config";
@@ -390,6 +394,11 @@ export function AnnoKitComposer({
   // that moment anyway, so the press could only be an accident.
   const canComment = canSubmitTo("comment", submitState) && !capturing;
   const canAgent = canSubmitTo("agent", submitState) && !capturing;
+  // Fix or question, per sheet (src/intent.ts): never remembered, so a
+  // question asked once cannot turn the next fix into a chat. Not offered
+  // in agentation compat, whose server has its own meaning for the field.
+  const [intent, setIntent] = useState<TaskIntent>("fix");
+  const showIntent = serverFlavor() !== "agentation";
 
   const submit = async (destination: SubmitDestination, nameHint?: string | null) => {
     if (!canSubmitTo(destination, submitState)) return;
@@ -449,6 +458,7 @@ export function AnnoKitComposer({
       attachScreenshot: hasScreenshot,
       outputDetail: prefs.outputDetail,
       agent: taskRun(agent),
+      intent,
     });
     if (!mounted.current) return;
     if (!finalId) {
@@ -561,7 +571,7 @@ export function AnnoKitComposer({
                 // field at one line so the row under it is drawn whole rather
                 // than sliced (src/push.ts).
                 style={[styles.input, { minHeight: composerInputMinHeight(pushing) }]}
-                placeholder={pasteWrapper() ? "Describe the change, or paste an image…" : "Describe the change…"}
+                placeholder={intentPlaceholder(intent, !!pasteWrapper())}
                 placeholderTextColor={p.textMuted}
                 multiline
                 autoFocus
@@ -598,8 +608,10 @@ export function AnnoKitComposer({
               With the chip carrying the state (and its own ✕ to remove),
               nothing has to be inferred from the position of a slider.
             */}
-            {(sources.length > 0 || screenshotOffered(capture) || agent?.perTask) && (
+            {(showIntent || sources.length > 0 || screenshotOffered(capture) || agent?.perTask) && (
               <View style={styles.iconRow} testID="annokit-attach-row">
+                {/* What the task wants, first in the row: it changes what the commit says. */}
+                {showIntent && <IntentToggle value={intent} onChange={setIntent} />}
                 {sources.length > 0 ? (
                   <Pressable
                     onPress={() => setPickerOpen(true)}
@@ -833,7 +845,7 @@ export function AnnoKitComposer({
                 // "Saving…" visually, and this is that fact for a screen
                 // reader — including that pressing again will do nothing.
                 accessibilityState={{ disabled: !canAgent, busy: submitting }}
-                accessibilityLabel="Create agent task — the agent will make this change"
+                accessibilityLabel={intentSubmitA11y(intent)}
                 style={[
                   styles.submitBtn,
                   { backgroundColor: p.agent },
@@ -842,7 +854,7 @@ export function AnnoKitComposer({
                 testID="annokit-submit-agent"
               >
                 <Text style={styles.submitText} numberOfLines={1}>
-                  {submitting ? "Saving…" : "Create Agent Task"}
+                  {intentSubmitLabel(intent, submitting)}
                 </Text>
               </Pressable>
             </View>

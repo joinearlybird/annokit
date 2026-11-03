@@ -321,6 +321,15 @@ export function AnnoKitQueue({
                       second, "I answered the agent's question" and "I have
                       not sent this yet" look identical.
                     */}
+                    {!!row.intentLabel && (
+                      <View
+                        style={styles.reopened}
+                        accessibilityLabel="A question: the agent answers it and changes nothing"
+                        testID={`annokit-queue-intent-${i}`}
+                      >
+                        <Text style={styles.reopenedText}>? {row.intentLabel}</Text>
+                      </View>
+                    )}
                     {!!row.status && (
                       <View
                         style={styles.reopened}

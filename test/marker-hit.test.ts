@@ -28,6 +28,7 @@ import {
   markersInteractive,
   pickMarkerAt,
   resolveOpenMarker,
+  markerBadge,
   visibleMarkers,
 } from "../src/marker-hit";
 import type { MarkerPlacement } from "../src/marker-hit";
@@ -93,6 +94,17 @@ describe("visible markers", () => {
     const list = [{ id: "a", x: 1, y: 1 }, { id: "b", x: 2, y: 2, routeName: "/settings" }];
     expect(visibleMarkers(list, null)).toHaveLength(2);
     expect(visibleMarkers(list, "/feed").map((m) => m.id)).toEqual(["a"]);
+  });
+});
+
+describe("a question's marker", () => {
+  it("carries the intent through and wears a ? badge; fixes and notes wear none", () => {
+    const out = visibleMarkers([{ id: "q", x: 1, y: 1, intent: "question" }, { id: "f", x: 2, y: 2 }], null);
+    expect(out[0]?.intent).toBe("question");
+    expect(out[1]).not.toHaveProperty("intent");
+    expect(markerBadge(out[0]!)).toBe("?");
+    expect(markerBadge(out[1]!)).toBeNull();
+    expect(markerBadge({ kind: "comment", intent: "question" })).toBeNull();
   });
 });
 

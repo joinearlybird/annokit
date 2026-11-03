@@ -73,6 +73,8 @@ export interface MarkerSource {
   routeName?: string;
   /** Comment lifecycle (`open` | `resolved` | `converted`); annotations have none. */
   status?: string;
+  /** "question" on a task that wants an answer (src/intent.ts); the marker wears a "?". */
+  intent?: string;
   /**
    * Set when this annotation was made FROM a team note's message. Such an
    * annotation is represented by that note's marker (which gains a blue
@@ -92,6 +94,13 @@ export interface MarkerPlacement {
   kind: MarkerKind;
   /** Comment status, carried through so the appearance can de-emphasize it. */
   status?: string;
+  /** The task's intent, carried through for the badge (`markerBadge`). */
+  intent?: string;
+}
+
+/** The small glyph on a marker's corner: "?" for a question task, null for everything else. */
+export function markerBadge(marker: { kind: MarkerKind; intent?: string }): string | null {
+  return marker.kind === "annotation" && marker.intent === "question" ? "?" : null;
 }
 
 /**
@@ -130,7 +139,7 @@ export function visibleMarkers(
     if (!a || typeof a.x !== "number" || typeof a.y !== "number") continue;
     if (routeName && a.routeName && a.routeName !== routeName) continue;
     if (typeof a.sourceCommentId === "string" && a.sourceCommentId) continue;
-    out.push({ id: a.id, x: a.x, y: a.y, number: out.length + 1, kind, status: a.status });
+    out.push({ id: a.id, x: a.x, y: a.y, number: out.length + 1, kind, status: a.status, ...(a.intent ? { intent: a.intent } : {}) });
   }
   return out;
 }

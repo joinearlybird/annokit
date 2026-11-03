@@ -108,6 +108,18 @@ describe("a Done row", () => {
   });
 });
 
+describe("a question's runs", () => {
+  it("say Answered where a fix says Done, and offer no Undo", () => {
+    const run = { ...RUN, outcome: "done" as const };
+    expect(doneRow({ id: "q", comment: "why blue?", status: "sent", intent: "question", runs: [run] }).how).toMatch(/^Answered/);
+    expect(doneRow({ id: "f", comment: "make it red", status: "sent", runs: [run] }).how).toMatch(/^Done/);
+    expect(taskUndoAction({ id: "q", comment: "why blue?", status: "sent", intent: "question", runs: [run] }, true)).toBeNull();
+    expect(taskUndoAction({ id: "f", comment: "make it red", status: "sent", runs: [run] }, true)?.kind).toBe("undo");
+    expect(runLines(run, "Answered").how).toMatch(/^Answered/);
+    expect(runLines({ ...run, outcome: "failed" }, "Answered").how).not.toMatch(/Answered/);
+  });
+});
+
 describe("the agent's title", () => {
   it("names the task in Done, with the request under it", () => {
     const titled = { ...RUN, title: "Darker primary button" };

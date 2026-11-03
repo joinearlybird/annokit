@@ -308,6 +308,24 @@ describe("status and empty states", () => {
  * did not list it at all.
  */
 
+describe("buildTaskRows — a question", () => {
+  it("wears a Question chip, and a fix wears none", () => {
+    const rows = buildTaskRows([
+      { id: "q", comment: "why blue?", intent: "question" } as ServerAnnotation,
+      { id: "f", comment: "make it red" } as ServerAnnotation,
+    ]);
+    expect(rows[0]?.intentLabel).toBe("Question");
+    expect(rows[1]).not.toHaveProperty("intentLabel");
+  });
+
+  it("is asked, not sent, in the detail pane", () => {
+    expect(detailSendLabel({ status: "pending", intent: "question" })).toEqual({ label: "Ask the agent", enabled: true });
+    expect(detailSendLabel({ status: "pending", intent: "question", reopened: true })).toEqual({ label: "Send follow-up to agent", enabled: true });
+    expect(detailSendLabel({ status: "pending", intent: "fix" })).toEqual({ label: "Send to agent", enabled: true });
+    expect(detailSendLabel({ status: "sent", intent: "question" })).toEqual({ label: "With the agent", enabled: false });
+  });
+});
+
 describe("buildTaskRows — reopened rows", () => {
   it("says nothing on an ordinary pending task", () => {
     expect(buildTaskRows([{ id: "a1", comment: "x" }])[0].status).toBeUndefined();

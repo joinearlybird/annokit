@@ -123,6 +123,7 @@ Additive: `protocolVersion` stays **1**. A v1 client tolerates a 404 here.
     { "type": "api", "value": "POST /api/data/todos", "label": "Todos — Add new entries" }
   ],
   "agent": { "id": "claude", "model": "opus", "effort": "high" },  // optional, see Agent → Per task
+  "intent": "question",              // optional, additive; absent = fix (see Questions)
   "device": {                        // optional, additive; Standard and Full detail (see below)
     "platform": "ios", "osVersion": "26.0", "idiom": "phone",
     "window": { "width": 402, "height": 874 }, "pixelRatio": 3, "fontScale": 1,
@@ -181,6 +182,20 @@ capture and one of three words otherwise:
 Team notes carry the same field (see *Comments*), so a task made from a
 note keeps the note's shape. `shape` is never trimmed by Output Detail: it
 is what makes the box readable.
+
+**Questions.** `intent` is optional and additive (`protocolVersion` stays
+1), and has one meaningful value: `"question"`. Such a task wants an
+answer, not a change: "why is this blue?", "where does this label come
+from?". The overlay offers it as a Fix / Question switch in the composer
+(per sheet, never remembered) and marks the task with a "?" in the queue,
+on its marker and in its detail; a finished question reads **Answered**
+rather than Done, and offers no Undo. A server that runs agents SHOULD run
+a question with read-only tools and tell the agent to answer in the thread
+and change nothing (the reference stub does both, and refuses `/undo` on a
+question with 409); its finished status is whatever the server uses for a
+finished task. A server that ignores the field runs the task as a fix,
+which is what every v1 server did. Not trimmed by Output Detail. In
+agentation compat the field is not sent: that server has its own `intent`.
 
 **`scroll`** — window coordinates carry no document scroll on native, so
 `x`/`y`/`boundingBox` alone are ambiguous on a scrolled screen; this is what

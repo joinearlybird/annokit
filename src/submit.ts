@@ -26,6 +26,7 @@ import type { AnnotationBody } from "./payload";
 import type { AnnotationReference } from "./attachments";
 import type { AgentRun } from "./agent-config";
 import { buildScreenshotPart, releaseScreenshot } from "./screenshot";
+import type { TaskIntent } from "./intent";
 import { annotationScreenshotPath, sessionAnnotationsPath } from "./url";
 
 /** What the overlay draws into a screenshot before taking it (src/burn-in.tsx). */
@@ -57,6 +58,8 @@ export interface AgentSubmitOptions {
    * Omitted: the server runs it on its current agent.
    */
   agent?: AgentRun | null;
+  /** Fix (default) or question (src/intent.ts). */
+  intent?: TaskIntent;
 }
 
 /**
@@ -101,13 +104,15 @@ export function buildCaptureBody(
     buildAnnotationBody(capture, comment.trim(), captureClientId(capture), options.references),
     options.outputDetail ?? annoKitPreferences().outputDetail,
   );
-  // Not detail: which agent runs the task is not context about the element,
-  // so no Output Detail level trims it.
+  // Not detail: which agent runs the task, and whether it is a question,
+  // are not context about the element, so no Output Detail level trims them.
   const run = options.agent;
-  if (!run) return body;
+  const asked = options.intent === "question" ? { intent: "question" as const } : {};
+  if (!run) return { ...body, ...asked };
   return {
     ...body,
     agent: { id: run.agent, ...(run.model ? { model: run.model } : {}), ...(run.effort ? { effort: run.effort } : {}) },
+    ...asked,
   };
 }
 

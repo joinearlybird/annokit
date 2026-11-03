@@ -514,12 +514,14 @@ export function taskReopenLabel(
  * is true and useless.
  */
 export function taskLifecycleLabel(
-  a: { status?: string; reopenedAt?: string; reopenCount?: number; redoRequestedAt?: string } | null | undefined,
+  a: { status?: string; intent?: string; reopenedAt?: string; reopenCount?: number; redoRequestedAt?: string } | null | undefined,
 ): string {
   const reopened = taskReopenLabel(a);
   if (reopened && (!a?.status || a.status === "pending")) {
     return `${reopened} — waiting to be sent`;
   }
+  // A finished question was answered, not done (src/intent.ts).
+  if (a?.intent === "question" && a.status && a.status !== "pending" && a.status !== "working") return "Answered";
   return taskStatusLabel(a?.status);
 }
 

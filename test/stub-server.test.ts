@@ -541,6 +541,14 @@ describe("bad input", () => {
     expect((await fetchComment(transport, note!.id))?.shape).toBe("area");
   });
 
+  it("keeps intent only when it is a question", async () => {
+    const base = { comment: "x", kind: "feedback", platform: "native", element: "Card", componentStack: [], x: 1, y: 2, boundingBox: { x: 1, y: 2, width: 10, height: 10 }, scroll: { offsetY: 0 } };
+    expect((await transport.postJsonAt(`/sessions/${SESSION}/annotations`, { ...base, id: "a-intent-q", intent: "question" })).status).toBe(201);
+    expect(((await fetchAnnotation(transport, "a-intent-q")).annotation as { intent?: string }).intent).toBe("question");
+    expect((await transport.postJsonAt(`/sessions/${SESSION}/annotations`, { ...base, id: "a-intent-x", intent: "nonsense" })).status).toBe(201);
+    expect((await fetchAnnotation(transport, "a-intent-x")).annotation).not.toHaveProperty("intent");
+  });
+
   it("keeps a sketch's strokes as sent, and drops a sketch it cannot read", async () => {
     const base = { comment: "x", kind: "feedback", platform: "native", element: "Card", componentStack: [], x: 1, y: 2, boundingBox: { x: 1, y: 2, width: 10, height: 10 }, scroll: { offsetY: 0 }, shape: "sketch" };
     const sketch = { strokes: [{ tool: "pen", points: [{ x: 1.5, y: 2 }, { x: 30, y: 40 }] }, { tool: "arrow", points: [{ x: 0, y: 0 }, { x: 9, y: 9 }] }] };
@@ -683,6 +691,28 @@ describe("progress while the agent works", () => {
     expect(readFileSync(join(bin, "prompt.txt"), "utf8")).toContain("The app's own assets (images, fonts, media) are in assets/");
     // No choice on the task: the agent's own model and effort.
     expect(readFileSync(join(bin, "args.txt"), "utf8")).not.toMatch(/--model|--effort/);
+  }, 15_000);
+
+  it("runs a question read-only, asks for an answer, and refuses to undo it", async () => {
+    await post("/sessions/ps/annotations", {
+      id: "pq", comment: "Why is this blue?", element: "Button", x: 1, y: 1, intent: "question",
+    });
+    await post("/annotations/send", { annotationIds: ["pq"] });
+    let a = (await (await fetch(`${base}/annotations/pq`)).json()) as { status: string };
+    for (let i = 0; i < 60 && a.status !== "sent"; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      a = (await (await fetch(`${base}/annotations/pq`)).json()) as { status: string };
+    }
+    expect(a.status).toBe("sent");
+    const prompt = readFileSync(join(bin, "prompt.txt"), "utf8");
+    expect(prompt).toContain("has a QUESTION about it");
+    expect(prompt).toContain("THEY ASKED: Why is this blue?");
+    expect(prompt).toContain("Do NOT edit");
+    expect(prompt).not.toContain("Edit the source to satisfy the request");
+    const args = readFileSync(join(bin, "args.txt"), "utf8");
+    expect(args).toContain("--allowedTools Read Glob Grep --disallowedTools Edit Write MultiEdit NotebookEdit Bash --permission-mode default");
+    expect(args).not.toContain("acceptEdits");
+    expect((await post("/annotations/pq/undo", {})).status).toBe(409);
   }, 15_000);
 
   it("runs a task on the model and effort it asked for", async () => {

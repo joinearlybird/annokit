@@ -116,6 +116,8 @@ export interface ServerAnnotation {
    */
   scroll?: { scrollViewTag?: number; offsetY?: number; offsetX?: number } | null;
   status?: string;
+  /** "question" when the task wants an answer, not a change (src/intent.ts); absent = fix. */
+  intent?: string;
   /**
    * What the agent is doing right now, in one short line ("Editing
    * app/Button.tsx"), while `status` is `working`. Optional and additive

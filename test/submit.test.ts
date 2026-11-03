@@ -83,6 +83,16 @@ describe("buildCaptureBody", () => {
     expect(JSON.stringify(minimal).length).toBeLessThan(JSON.stringify(full).length);
   });
 
+  it("says when the task is a question, at every Output Detail, and nothing for a fix", () => {
+    expect(buildCaptureBody(CAPTURE, "x")).not.toHaveProperty("intent");
+    expect(buildCaptureBody(CAPTURE, "x", { intent: "fix" })).not.toHaveProperty("intent");
+    expect(buildCaptureBody(CAPTURE, "x", { intent: "question", outputDetail: "minimal" }).intent).toBe("question");
+    const run = { agent: "codex", model: "gpt-6", modelLabel: "GPT-6", effort: "high" };
+    const both = buildCaptureBody(CAPTURE, "x", { intent: "question", agent: run });
+    expect(both.intent).toBe("question");
+    expect(both.agent?.id).toBe("codex");
+  });
+
   it("carries the capture's device from Standard up, and never at Minimal", () => {
     const device = { platform: "ios", window: { width: 402, height: 874 }, pixelRatio: 3, fontScale: 1, colorScheme: null, orientation: "portrait" } as const;
     const withDevice: PendingCapture = { ...CAPTURE, device };

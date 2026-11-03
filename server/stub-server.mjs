@@ -411,10 +411,13 @@ function attachedLines(references) {
 }
 
 function agentPrompt(a) {
+  const asking = a.intent === "question";
   const lines = [
-    "A developer annotated a running React Native screen. Make the change they asked for.",
+    asking
+      ? "A developer annotated a running React Native screen and has a QUESTION about it. Answer it; change no files."
+      : "A developer annotated a running React Native screen. Make the change they asked for.",
     "",
-    `THEY WROTE: ${a.comment ?? "(no text)"}`,
+    `${asking ? "THEY ASKED" : "THEY WROTE"}: ${a.comment ?? "(no text)"}`,
     "",
     "WHAT THEY TOUCHED:",
     `  component: ${a.element ?? "unknown"}`,
@@ -465,7 +468,7 @@ function agentPrompt(a) {
   }
   lines.push(
     "",
-    ...FINISH,
+    ...finishFor(a),
   );
   return lines.join("\n");
 }
@@ -493,9 +496,21 @@ function followUpPrompt(a) {
     ...said.map((c) => `  ${c}`),
     ...(shot?.path ? ["", `SCREENSHOT (from the original request): ${shot.path}`] : []),
     "",
-    ...FINISH,
+    ...finishFor(a),
   ].join("\n");
 }
+
+/**
+ * A QUESTION (docs/protocol.md, "Questions") wants an answer in the thread
+ * and no edit: its prompt ends differently, and the agent runs read-only
+ * where the CLI allows it (server/agents.mjs).
+ */
+const FINISH_QUESTION = [
+  "Answer the question in one or two short paragraphs, from the code. Do NOT edit",
+  "any file: this task wants an answer, not a change. Finish with a last line",
+  "`Title: <3 to 6 words naming the question>` (e.g. `Title: Why the button is blue`).",
+];
+const finishFor = (a) => (a.intent === "question" ? FINISH_QUESTION : FINISH);
 
 /**
  * What the capture was ABOUT, when it was not simply the element: a held
@@ -737,7 +752,9 @@ function runAgent(id, done, origin = `http://localhost:${PORT}`) {
   // The picture, for agents that take one on the command line (Codex);
   // the prompt names its path for the rest.
   const images = undoing ? [] : [storedScreenshot(annotation)?.path].filter(Boolean);
-  const args = agent.args(prompt, workDir, model, agent.extra, effort, session, images);
+  const readOnly = annotation.intent === "question" && !undoing;
+  if (readOnly && !agent.readOnlyArgs) console.log(`    (question: ${agent.label} has no read-only mode here; the prompt asks it not to edit)`);
+  const args = agent.args(prompt, workDir, model, agent.extra, effort, session, images, { readOnly });
   // Only meaningful in place: in a worktree the edits are committed to a
   // branch and reported from there, and nothing lands in your working tree.
   const before = wt ? null : changedSnapshot();
@@ -1047,6 +1064,8 @@ function boundCapture(body) {
     if (device) capture.device = device;
     else delete capture.device;
   }
+  // Fix or question (docs/protocol.md, "Questions"): only "question" means anything.
+  if (capture.intent !== undefined && capture.intent !== "question") delete capture.intent;
   // The capture's shape (docs/protocol.md, "Shapes"): one of the names the
   // protocol gives, or nothing — an element capture sends none.
   if (capture.shape !== undefined && !["element", "point", "area", "sketch"].includes(capture.shape)) delete capture.shape;
@@ -1607,6 +1626,7 @@ async function handle(req, res) {
     if (seg[2] === "undo" && req.method === "POST") {
       if (!annotation) return json(res, 404, { error: "no such annotation" });
       if (!UNDO) return json(res, 409, { error: WORKTREE ? "in worktree mode the change is on its branch: delete the branch to undo it" : "this server runs no agent" });
+      if (annotation.intent === "question") return json(res, 409, { error: "a question changed nothing to undo" });
       if (annotation.status === "pending" || annotation.status === "working" || annotation.undoRequested) {
         return json(res, 409, { error: "only a finished task can be undone" });
       }
