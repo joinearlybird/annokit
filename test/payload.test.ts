@@ -407,6 +407,10 @@ describe("output detail — how much of it actually goes", () => {
       styles: { backgroundColor: "#888" },
       accessibility: { label: "Row 1" },
     },
+    device: {
+      platform: "ios", osVersion: "26.0", idiom: "phone", window: { width: 402, height: 874 },
+      pixelRatio: 3, fontScale: 1, colorScheme: "dark", orientation: "portrait",
+    },
   } as unknown as Parameters<typeof buildAnnotationBody>[0];
 
   const full = () => buildAnnotationBody(capture, "make it blue", "a1");
@@ -419,6 +423,7 @@ describe("output detail — how much of it actually goes", () => {
     expect(body.testID).toBe("feed-row-1");
     expect(body.computedStyles).toBe('{"backgroundColor":"#888"}');
     expect(body.accessibility).toBe('{"label":"Row 1"}');
+    expect(body.device).toEqual(capture.device);
   });
 
   it("keeps nearby text but drops the stack, styles and accessibility at Standard", () => {
@@ -435,9 +440,11 @@ describe("output detail — how much of it actually goes", () => {
     expect(body.accessibility).toBeUndefined();
     expect(body.source).toEqual({ file: "app/feed.tsx", line: 12 });
     expect(body.testID).toBe("feed-row-1");
+    // The device rides with the on-screen context, from Standard up.
+    expect(body.device).toEqual(capture.device);
   });
 
-  it("drops the source and the testID too at Minimal", () => {
+  it("drops the source, the testID and the device too at Minimal", () => {
     const body = applyOutputDetail(full(), "minimal");
     expect(body.componentStack).toEqual([]);
     expect(body.nearbyText).toBeUndefined();
@@ -445,6 +452,14 @@ describe("output detail — how much of it actually goes", () => {
     expect(body.accessibility).toBeUndefined();
     expect(body.source).toBeUndefined();
     expect(body.testID).toBeUndefined();
+    expect(body.device).toBeUndefined();
+  });
+
+  it("sends no device when the capture has none", () => {
+    const { device: _device, ...bare } = capture as unknown as { device: unknown };
+    const body = buildAnnotationBody(bare as unknown as Parameters<typeof buildAnnotationBody>[0], "x", "a2");
+    expect(body.device).toBeUndefined();
+    expect("device" in applyOutputDetail(body, "standard") && applyOutputDetail(body, "standard").device).toBeFalsy();
   });
 
   it("never drops what makes the task findable", () => {

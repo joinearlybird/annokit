@@ -1,4 +1,5 @@
 import type { AnnotationReference } from "./attachments";
+import type { DeviceInfo } from "./device";
 import type { InspectorHit } from "./inspector";
 import type { ThreadMessage } from "./thread";
 
@@ -39,6 +40,15 @@ export interface PendingCapture {
    * follows the choice rather than preceding it.
    */
   screenshotUri: string | null;
+  /**
+   * The device as it was when the capture was made (src/device.ts):
+   * platform, OS version, window size, pixel ratio, font scale, colour
+   * scheme, orientation. A snapshot, because the orientation or the scheme
+   * can change before the task is sent, and the capture is about the
+   * screen the user saw. Sent at Standard detail and up; absent when the
+   * provider could not read it.
+   */
+  device?: DeviceInfo;
   /**
    * The client id the agent task will be created under. Minted once, when
    * the capture is made, so every retry of the same capture posts the SAME

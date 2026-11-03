@@ -66,6 +66,12 @@ describe("out of the box", () => {
     expect(outputDetailSummary("standard")).toMatch(/nearby text/i);
     expect(outputDetailSummary("full")).not.toMatch(/nearby text/i);
   });
+
+  // Same for the device: it leaves the app from Standard up (src/payload.ts).
+  it("names the device at the level that starts sending it", () => {
+    expect(outputDetailSummary("minimal")).not.toMatch(/device/i);
+    expect(outputDetailSummary("standard")).toMatch(/device/i);
+  });
 });
 
 describe("precedence: host props, then the panel", () => {

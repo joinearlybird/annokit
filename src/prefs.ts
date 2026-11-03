@@ -52,7 +52,7 @@ export function outputDetailSummary(detail: OutputDetail): string {
   // CONTENT and has ridden at Standard since 2026-09-22; a panel that says
   // otherwise tells someone keeping it on the device that it is.
   if (detail === "full") return "Standard, plus the component stack, styles and accessibility.";
-  return "Element, source file, testID, nearby text, route and position.";
+  return "Element, source file, testID, nearby text, device, route and position.";
 }
 
 /** What the host asked for, and what the user chose. */
