@@ -18,6 +18,11 @@
  * where it has none, by the credentials it reads. /agent reports it as
  * `connected`, and the app offers only connected agents.
  *
+ * PICTURES. `images` in `args` is the paths of the task's screenshots on
+ * disk. Codex takes them on the command line (-i, on a fresh run and a
+ * resumed one); Claude Code opens a path the prompt names with its Read
+ * tool, so it needs nothing here; the others are only told the path.
+ *
  * SESSIONS, FOR FOLLOW-UPS. Claude Code and Codex keep their sessions, so a
  * follow-up on the same task can CONTINUE the run before it — the files it
  * read, what it found, what it tried — instead of starting over from the
@@ -123,7 +128,7 @@ export const PROVIDERS = {
   codex: {
     label: "Codex",
     bins: ["codex"],
-    args: (prompt, dir, model, extra, effort, session) => session?.mode === "resume"
+    args: (prompt, dir, model, extra, effort, session, images = []) => session?.mode === "resume"
       // `exec resume` takes neither --sandbox nor -C: the sandbox goes in as
       // config, and the directory is the process's own (the server's cwd).
       ? [
@@ -132,11 +137,13 @@ export const PROVIDERS = {
         "--skip-git-repo-check",
         ...(model ? ["-m", model] : []),
         ...(effort ? ["-c", `model_reasoning_effort="${effort}"`] : []),
+        ...images.flatMap((path) => ["-i", path]),
       ]
       : [
         "exec", prompt,
         "--sandbox", AGENT_SANDBOX,
         "-C", dir,
+        ...images.flatMap((path) => ["-i", path]),
         // Parallel runs share session-restore files without this, and a
         // task per annotation is exactly the parallel case — so only a run
         // whose session will be resumed keeps one.

@@ -11,7 +11,10 @@
  * It is deliberately IN MEMORY and single-process: restart it and the marks
  * are gone. That is the right trade for an example — there is no database to
  * install, no migration to run, and the entire protocol fits in one file you
- * can read in a sitting. It speaks every route the client calls, in the
+ * can read in a sitting. The one thing it writes to disk is a copy of each
+ * uploaded screenshot, under a per-port temp directory, so the agent it runs
+ * can open the picture; that directory is wiped when it starts and when it
+ * exits. It speaks every route the client calls, in the
  * shapes docs/protocol.md gives them (test/stub-server.test.ts holds it to
  * that), and it bounds its inputs. It is still NOT a server to deploy: see
  * "Server obligations" in docs/protocol.md for what a real one must enforce
@@ -24,7 +27,7 @@
  * needs no clone. Node built-ins only, like the rest of the package.
  */
 import { createServer } from "node:http";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
 import { execFile, spawnSync } from "node:child_process";
@@ -424,6 +427,17 @@ function agentPrompt(a) {
   }
   if (a.testID) lines.push(`  testID: ${a.testID}`);
   if (a.routeName) lines.push(`  screen: ${a.routeName}`);
+  // Where it is, in window points: the one field that survives every Output
+  // Detail level, and what makes the screenshot below readable.
+  if (a.boundingBox) lines.push(`  box (window points): ${boxText(a.boundingBox)}; tap at (${num(a.x)}, ${num(a.y)})`);
+  if (Array.isArray(a.componentStack) && a.componentStack.length) lines.push(`  component stack: ${a.componentStack.map(one).join(" > ")}`);
+  if (Array.isArray(a.elements) && a.elements.length > 1) {
+    const covered = a.elements.slice(0, 12).map((e) => `${one(e?.element ?? "?")} ${e?.boundingBox ? boxText(e.boundingBox) : ""}`.trim());
+    const more = a.elements.length > 12 ? `; +${a.elements.length - 12} more` : "";
+    lines.push(`  covers: ${covered.join("; ")}${more}`);
+  }
+  const shot = screenshotLines(a);
+  if (shot.length) lines.push("", ...shot);
   // The device as the user saw it: a layout complaint reads differently at
   // 320 points and font scale 1.3 than on a tablet, and a colour complaint
   // needs the scheme.
@@ -472,12 +486,64 @@ function followUpPrompt(a) {
   const thread = (a.thread ?? []).filter((m) => m.id !== a.placeholderId && m.content);
   const lastAgent = thread.map((m) => m.role).lastIndexOf("agent");
   const said = thread.slice(lastAgent + 1).filter((m) => m.role === "user").map((m) => m.content);
+  const shot = storedScreenshot(a);
   return [
     said.length ? "They replied about the change you just made:" : "They sent this task to you again.",
     ...said.map((c) => `  ${c}`),
+    ...(shot?.path ? ["", `SCREENSHOT (from the original request): ${shot.path}`] : []),
     "",
     ...FINISH,
   ].join("\n");
+}
+
+const num = (v) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v) : "?");
+const boxText = (b) => `(${num(b.x)}, ${num(b.y)}, ${num(b.width)}×${num(b.height)})`;
+const one = (s) => String(s ?? "").replace(/\s+/g, " ").slice(0, 300);
+
+/** The stored screenshot a task's references point at, or null. */
+function storedScreenshot(a) {
+  for (const r of a.references ?? []) {
+    if (r?.type !== "screenshot") continue;
+    const shot = db.screenshots.get(String(r.value ?? "").split("/").pop());
+    if (shot) return shot;
+  }
+  return null;
+}
+
+/**
+ * THE PICTURE, for the prompt. A path the agent can open (Claude Code reads
+ * a PNG with Read; Codex is handed it with -i), the task's box in it, and
+ * how its pixels relate to window points. The scale is worked out HERE,
+ * from the PNG's own header against the device's window width, never taken
+ * from the client's word: a prompt that calls a 3x image "one pixel per
+ * point" sends the agent to the wrong place.
+ */
+function screenshotLines(a) {
+  const shot = storedScreenshot(a);
+  if (!shot?.path) return [];
+  const windowWidth = a.device?.window?.width;
+  const windowHeight = a.device?.window?.height;
+  let scale = "";
+  let skew = null;
+  if (shot.width && windowWidth) {
+    const ratio = shot.width / windowWidth;
+    scale = Math.abs(ratio - 1) < 0.02
+      ? "(1x: one pixel is one point)"
+      : `(${ratio.toFixed(1)}x: multiply the point coordinates below by that to find them in the image)`;
+    if (shot.height && windowHeight) {
+      const vertical = shot.height / windowHeight;
+      if (Math.abs(vertical - ratio) > 0.02 * Math.max(ratio, vertical)) skew = "the image is shorter than the window (a status bar may be cropped), so trust x more than y";
+    }
+  } else if (shot.width && shot.height) {
+    scale = `(${shot.width}×${shot.height} px)`;
+  }
+  const lines = [`SCREENSHOT: ${shot.path}${scale ? ` ${scale}` : ""}`];
+  if (a.boundingBox) lines.push(`  the element's box in it: ${boxText(a.boundingBox)}; the tap at (${num(a.x)}, ${num(a.y)})`);
+  lines.push(shot.marks
+    ? "  our marker for this task is burned in as a numbered badge; the app's own UI is otherwise unchanged"
+    : "  the screen as the user saw it, with any task markers the overlay was showing");
+  if (skew) lines.push(`  ${skew}`);
+  return lines;
 }
 
 /**
@@ -639,7 +705,10 @@ function runAgent(id, done, origin = `http://localhost:${PORT}`) {
   // change and knows it best, but it still has to be told to take it back.
   const undoing = Boolean(annotation.undoRequested);
   const prompt = undoing ? undoPrompt(annotation) : resumed ? followUpPrompt(annotation) : agentPrompt(annotation);
-  const args = agent.args(prompt, workDir, model, agent.extra, effort, session);
+  // The picture, for agents that take one on the command line (Codex);
+  // the prompt names its path for the rest.
+  const images = undoing ? [] : [storedScreenshot(annotation)?.path].filter(Boolean);
+  const args = agent.args(prompt, workDir, model, agent.extra, effort, session, images);
   // Only meaningful in place: in a worktree the edits are committed to a
   // branch and reported from there, and nothing lands in your working tree.
   const before = wt ? null : changedSnapshot();
@@ -1036,23 +1105,55 @@ function runFor(annotation) {
 }
 
 /**
- * SCREENSHOTS ARE CAPPED IN MEMORY. Each one is kept until the stub
- * restarts, and a long session of tasks with screenshots only grows; past
- * SCREENSHOTS_MAX bytes the oldest go first, and a task or note takes its
- * own with it when deleted. An evicted one answers 404, which the overlay
- * shows as "could not be loaded" rather than a broken image.
+ * SCREENSHOTS ARE CAPPED IN MEMORY, AND MIRRORED TO DISK. Each one is kept
+ * until the stub restarts, and a long session of tasks with screenshots
+ * only grows; past SCREENSHOTS_MAX bytes the oldest go first, and a task or
+ * note takes its own with it when deleted. An evicted one answers 404,
+ * which the overlay shows as "could not be loaded" rather than a broken
+ * image.
+ *
+ * The copy on disk is for the agent: a prompt can name a file, not a Map
+ * entry, and Claude Code opens a PNG with Read while Codex takes one with
+ * -i. It lives under a per-port temp directory (two stubs never share
+ * one), named by the server-minted id (nothing from the request reaches
+ * the path), wiped when the stub starts and when it exits, and bounded by
+ * the same cap: what leaves memory leaves the disk. A write that fails
+ * (no space, no permission) is said once and the stub carries on in
+ * memory; such a screenshot simply has no path for the prompt to name.
  */
 const SCREENSHOTS_MAX = (Number(process.env.SCREENSHOTS_MB) || 256) * 1024 * 1024;
+/** Longest side a screenshot may have, in pixels (docs/protocol.md, Server obligations 3). */
+const SCREENSHOT_MAX_DIM = 16384;
+const SCREENSHOT_DIR = join(tmpdir(), `annokit-${PORT}`, "screenshots");
 let screenshotBytes = 0;
+let screenshotDiskWarned = false;
+
+rmSync(join(tmpdir(), `annokit-${PORT}`), { recursive: true, force: true });
+try { mkdirSync(SCREENSHOT_DIR, { recursive: true }); } catch { /* said when the first write fails */ }
+process.on("exit", () => rmSync(join(tmpdir(), `annokit-${PORT}`), { recursive: true, force: true }));
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(0));
 
 function keepScreenshot(id, shot) {
+  const path = join(SCREENSHOT_DIR, `${id}.${shot.contentType === "image/png" ? "png" : "jpg"}`);
+  try {
+    writeFileSync(path, shot.bytes);
+    shot.path = path;
+  } catch (err) {
+    if (!screenshotDiskWarned) console.log(`  ⚠ could not write screenshots under ${SCREENSHOT_DIR} (${err.code ?? err.message}); the agent will not be handed them`);
+    screenshotDiskWarned = true;
+  }
   db.screenshots.set(id, shot);
   screenshotBytes += shot.bytes.length;
   for (const [old, held] of db.screenshots) {
     if (screenshotBytes <= SCREENSHOTS_MAX || old === id) break;
-    db.screenshots.delete(old);
-    screenshotBytes -= held.bytes.length;
+    forgetScreenshot(old, held);
   }
+}
+
+function forgetScreenshot(id, held) {
+  db.screenshots.delete(id);
+  screenshotBytes -= held.bytes.length;
+  if (held.path) rmSync(held.path, { force: true });
 }
 
 /** Drop the screenshots a task's or note's references point at. */
@@ -1061,10 +1162,16 @@ function dropScreenshots(references) {
     if (r?.type !== "screenshot") continue;
     const id = String(r.value ?? r.url ?? "").split("/").pop();
     const held = db.screenshots.get(id);
-    if (!held) continue;
-    db.screenshots.delete(id);
-    screenshotBytes -= held.bytes.length;
+    if (held) forgetScreenshot(id, held);
   }
+}
+
+/** A PNG's pixel size from its IHDR chunk, or null when the bytes do not carry one. */
+function pngSize(bytes) {
+  if (bytes.length < 24 || bytes.subarray(12, 16).toString("latin1") !== "IHDR") return null;
+  const width = bytes.readUInt32BE(16);
+  const height = bytes.readUInt32BE(20);
+  return width > 0 && height > 0 ? { width, height } : null;
 }
 
 /** The first file part of a multipart body with its file name, or null. */
@@ -1134,8 +1241,16 @@ async function storeScreenshot(req, origin) {
   if (!bytes) throw new HttpError(400, "no file part");
   const contentType = sniffImage(bytes);
   if (!contentType) throw new HttpError(415, "not a PNG or JPEG");
+  // Pixel dimensions, read from the file itself: the cap the protocol asks
+  // for, and what the prompt needs to relate pixels to points.
+  const size = contentType === "image/png" ? pngSize(bytes) : null;
+  if (size && (size.width > SCREENSHOT_MAX_DIM || size.height > SCREENSHOT_MAX_DIM)) throw new HttpError(413, "image too large");
+  // `?marks=…`: what the client says it drew into the shot (its own task
+  // badge, the element outline). Advisory, and only ever used to word the
+  // prompt; a client that sends nothing gets the hedged wording.
+  const marks = new URL(req.url ?? "/", "http://stub").searchParams.get("marks");
   const id = randomUUID();
-  keepScreenshot(id, { contentType, bytes });
+  keepScreenshot(id, { contentType, bytes, ...(size ?? {}), ...(marks ? { marks: clampText(marks, 80) } : {}) });
   return { type: "screenshot", value: `${origin}/screenshots/${id}`, label: "Screenshot" };
 }
 
@@ -1666,7 +1781,7 @@ server.listen(PORT, HOST, () => {
   console.log(NETWORK
     ? `  open to your network (HOST=${HOST}): every request needs the token below`
     : `  this machine only — for a physical device, HOST=0.0.0.0 npx annokit server`);
-  console.log(`  in memory; restart to clear`);
+  console.log(`  in memory; restart to clear (screenshots also under ${SCREENSHOT_DIR} while it runs)`);
   const named = AGENT ? `${AGENT.label}${AGENT_MODEL ? ` · ${AGENT_MODEL}` : ""}` : "";
   const others = PROVIDER_ORDER.filter((id) => detected[id]?.installed && id !== AGENT?.id).map((id) => PROVIDERS[id].label);
   if (AGENT && WORKTREE) {
