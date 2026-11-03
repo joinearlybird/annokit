@@ -104,6 +104,22 @@ export function AnnoKitAim({ target, occludedTop, topMargin }: AimProps) {
 }
 
 /**
+ * The pinned spot (src/hold.ts): a small ring on the exact point, over any
+ * element outline that stays as context. Same halo language as the box so
+ * it reads on any background.
+ */
+export function AnnoKitPinDot({ x, y }: { x: number; y: number }) {
+  const styles = useStyles();
+  return (
+    <>
+      <View pointerEvents="none" style={[styles.pinHalo, { left: x - 9, top: y - 9 }]} />
+      <View pointerEvents="none" testID="annokit-pin-dot" style={[styles.pinDot, { left: x - 7, top: y - 7 }]} />
+      <View pointerEvents="none" style={[styles.pinCore, { left: x - 2, top: y - 2 }]} />
+    </>
+  );
+}
+
+/**
  * The area rectangle — while the drag draws it and after release keeps it.
  * Same outline language as the aim box (halo for contrast on any
  * background), dashed: a region, not a live element.
@@ -381,6 +397,32 @@ const useStyles = themedStyles((p) => ({
     borderStyle: "dashed",
     borderRadius: 8,
     zIndex: 9996,
+  },
+  pinHalo: {
+    position: "absolute",
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: p.aimOutline,
+    zIndex: 9997,
+  },
+  pinDot: {
+    position: "absolute",
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: p.agent,
+    zIndex: 9998,
+  },
+  pinCore: {
+    position: "absolute",
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: p.agent,
+    zIndex: 9998,
   },
   modeFloat: {
     position: "absolute",

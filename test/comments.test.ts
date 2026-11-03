@@ -164,6 +164,25 @@ describe("buildCommentBody", () => {
     });
   });
 
+  it("carries an area note's rectangle and shape, so a task made from it is an area task", () => {
+    const rect = { x: 40, y: 300, width: 240, height: 160 };
+    const sent = wire(buildCommentBody({ ...CAPTURE, areaRect: rect, shape: "area" }, "tighten this"));
+    expect(sent.shape).toBe("area");
+    expect(sent.boundingBox).toEqual(rect);
+    expect(sent.element).toBe("PrimaryButton");
+    const empty = wire(buildCommentBody({ ...CAPTURE, hit: null, areaRect: rect }, "gap"));
+    expect(empty.element).toBe("Area");
+    expect(empty.shape).toBe("area");
+  });
+
+  it("carries a held spot as a point with a zero-size box", () => {
+    const sent = wire(buildCommentBody({ ...CAPTURE, shape: "point" }, "here"));
+    expect(sent.shape).toBe("point");
+    expect(sent.boundingBox).toEqual({ x: 120, y: 340, width: 0, height: 0 });
+    expect(sent.element).toBe("PrimaryButton");
+    expect("shape" in wire(buildCommentBody(CAPTURE, "x"))).toBe(false);
+  });
+
   it("never sends a user id — authors are resolved server-side", () => {
     const sent = wire(buildCommentBody(CAPTURE, "x"));
     expect("author" in sent).toBe(false);
@@ -239,6 +258,18 @@ describe("a note's captured identity", () => {
     expect(capture.routeName).toBe("/home");
     // Comments capture no screenshot in v1.
     expect(capture.screenshotUri).toBeNull();
+  });
+
+  it("restores an area note as an area capture, and a spot as a point", () => {
+    const area = commentToCapture({ ...COMMENT, shape: "area", element: "Area", boundingBox: { x: 40, y: 300, width: 240, height: 160 } });
+    expect(area.shape).toBe("area");
+    expect(area.areaRect).toEqual({ x: 40, y: 300, width: 240, height: 160 });
+    expect(area.hit).toBeNull();
+    const spot = commentToCapture({ ...COMMENT, shape: "point", boundingBox: { x: 150, y: 310, width: 0, height: 0 } });
+    expect(spot.shape).toBe("point");
+    expect(spot.hit?.element).toBe("PrimaryButton");
+    expect(spot).not.toHaveProperty("areaRect");
+    expect(commentToCapture({ ...COMMENT, shape: "octagon" })).not.toHaveProperty("shape");
   });
 
   it("targets a position-only comment as well as it can", () => {

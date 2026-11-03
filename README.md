@@ -21,7 +21,8 @@ reference implementation.
 
 - **Real component identity.** Aiming names the nearest user component —
   `PrimaryButton`, not `View` — symbolicated to its definition site
-  (`FeedRow · FeedRow.tsx:9`). Drag to survey before you commit.
+  (`FeedRow · FeedRow.tsx:9`). Drag to survey before you commit, hold to
+  pin an exact spot, or switch to Area to draw a rectangle.
 - **One mark, two destinations.** Write the sentence first; the button you
   tap to send is the choice: **Comment** for the team, **Create Agent Task**
   for the agent.

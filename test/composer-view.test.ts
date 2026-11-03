@@ -33,6 +33,17 @@ describe("the identity line", () => {
     expect(captureIdentityLine({ hit: { element: "Row" } })).toBe("Row");
   });
 
+  it("names a held spot, an area and a sketch by their shape", () => {
+    const hit = { element: "FeedRow", source: { file: "app/FeedRow.tsx", line: 9 } };
+    expect(captureIdentityLine({ hit, shape: "point" })).toBe("This spot on FeedRow · FeedRow.tsx:9");
+    expect(captureIdentityLine({ hit: null, shape: "point", routeName: "/home" })).toBe("This spot · /home");
+    const rect = { x: 40, y: 300, width: 240, height: 160 };
+    expect(captureIdentityLine({ hit, areaRect: rect })).toBe("Area · FeedRow · FeedRow.tsx:9");
+    expect(captureIdentityLine({ hit: null, areaRect: rect })).toBe("Area 240×160");
+    expect(captureIdentityLine({ hit, shape: "sketch" })).toBe("Sketch over FeedRow · FeedRow.tsx:9");
+    expect(captureIdentityLine({ hit: null, sketch: { strokes: [{}] } })).toBe("Sketch");
+  });
+
   it("says Screen when nothing was hit", () => {
     expect(captureIdentityLine({})).toBe("Screen");
     expect(captureIdentityLine({ hit: null, routeName: "/feed" })).toBe("Screen · /feed");

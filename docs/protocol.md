@@ -104,14 +104,14 @@ Additive: `protocolVersion` stays **1**. A v1 client tolerates a 404 here.
   "routeName": "/home",              // router pathname (optional)
   "x": 120, "y": 340,                // tap point, window coordinates
   "boundingBox": { "x": 52, "y": 179.7, "width": 62, "height": 17 }, // touched view frame, window coords
+  "shape": "point",                  // optional, additive: "point" | "area" | "sketch"; absent = element (see Shapes)
   "nearbyText": "Get started",       // string children near the touch (optional; Standard and Full detail)
   "selectedText": "Get  started",    // exact substring the user quoted (optional; user-authored, never trimmed by Output Detail). NOT sent by this client since 2026-09-22 — nearbyText now rides at Standard instead. Other clients (the web overlay) still send it, so servers should keep accepting it.
   "computedStyles": "{\"backgroundColor\":\"#888\",\"opacity\":0.4}", // flattened style of the touched view, compact JSON (optional; Full detail only)
   "accessibility": "{\"label\":\"Get started\",\"role\":\"button\"}", // a11y identity {label, role, hint, state}, compact JSON (optional; Full detail only)
   "scroll": { "scrollViewTag": 42, "offsetY": 480, "offsetX": 0 }, // owning scroll container
-  // Area captures (the armed-mode chip's Area mode): boundingBox is the DRAWN
-  // RECTANGLE, element is the component sampled at its center ("Area" when the
-  // region is empty), and any other sampled components ride in elements[].
+  // Area captures: see Shapes below — boundingBox is the drawn rectangle and
+  // any other sampled components ride in elements[].
   "isMultiSelect": true,             // present (true) only when the annotation covers >1 element
   "elements": [                      // every covered element, primary first (only with isMultiSelect)
     { "element": "PrimaryButton", "componentStack": ["…"], "source": { "file": "…", "line": 4 },
@@ -144,6 +144,27 @@ sent:
 `componentStack` is always present, so an empty one means "not sent", not
 "no components". When the touch hit nothing the client can name, `element`
 is `"Screen"` and `boundingBox` is a zero-size box at the tap point.
+
+**Shapes.** `shape` says what the annotation is about, and is optional and
+additive (`protocolVersion` stays 1): a server stores it as sent, and a
+reader that does not know it sees an element at `boundingBox`, which is
+what every capture was before. It is **omitted** for the ordinary element
+capture and one of three words otherwise:
+
+- `"point"` — a press-and-hold pinned the exact spot under the finger.
+  `boundingBox` is a zero-size box at `x`/`y`; `element` is the component
+  under the finger, kept as context (`"Screen"` when there was none). The
+  point is the subject, not the component.
+- `"area"` — the armed-mode chip's Area mode drew a rectangle. `boundingBox`
+  is the drawn rectangle; `element` is the component sampled at its centre
+  (`"Area"` when the region is empty); other sampled components ride in
+  `elements[]`.
+- `"sketch"` — strokes drawn over the screen; defined with the `sketch`
+  field when that ships.
+
+Team notes carry the same field (see *Comments*), so a task made from a
+note keeps the note's shape. `shape` is never trimmed by Output Detail: it
+is what makes the box readable.
 
 **`scroll`** — window coordinates carry no document scroll on native, so
 `x`/`y`/`boundingBox` alone are ambiguous on a scrolled screen; this is what
@@ -781,6 +802,7 @@ Routes (same base URL as everything else):
   "testID": "feed-row-1",
   "x": 150, "y": 310,
   "boundingBox": { "x": 17.6, "y": 306.3, "width": 367, "height": 68.6 },
+  "shape": "area",                                        // optional, additive; as for annotations (Shapes)
   "scroll": { "scrollViewTag": 1654, "offsetY": 0 },
   "authorName": "Ada"                                  // ADVISORY, optional — see below
 }
@@ -792,9 +814,10 @@ Routes (same base URL as everything else):
   comment that is later sent to the agent must target as precisely as one
   written directly. Unlike an annotation the body is **not** trimmed by
   Output Detail, so `componentStack`, `source` and `testID` are always
-  sent. An Area capture's drawn rectangle is not used: `boundingBox` is the
-  frame of the element sampled at its centre. There is no `id`: **the
-  server names comments.**
+  sent. `shape` and `boundingBox` follow the same rules as an annotation's
+  (*Shapes*): an Area note's `boundingBox` is the drawn rectangle, a held
+  spot's is zero-size at the point, and a task later made from the note
+  keeps that shape. There is no `id`: **the server names comments.**
 - `GET /comments/:id` → `{"comment": Comment}` — the authoritative thread;
   the detail view reads it when it opens.
 - `POST /comments/:id/messages` body `{"content": "…", "authorName"?: "…"}`

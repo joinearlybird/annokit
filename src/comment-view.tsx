@@ -38,6 +38,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { TEXT_MAX } from "./limits";
+import { detailTitle } from "./shape";
 import { pictureUrl, screenshotA11yLabel, splitReferences } from "./reference-view";
 import { AnnoKitScreenshotViewer } from "./screenshot-viewer";
 import { themedStyles, useAnnoKitTheme } from "./theme-context";
@@ -311,7 +312,7 @@ export function AnnoKitCommentView({
       destination="comment"
       onCovered={onCovered}
       pushing={pushing}
-      title={comment.element || "This screen"}
+      title={detailTitle(comment)}
       sourceRef={sourceRef(origin.source)}
       route={routeDisplay(origin.routeName)}
       contextLabel={detailContextLabel(origin)}

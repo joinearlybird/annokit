@@ -529,6 +529,18 @@ describe("bad input", () => {
     expect((await fetchAnnotation(transport, "a-device-none")).annotation).not.toHaveProperty("device");
   });
 
+  it("keeps a capture's shape when it is one the protocol names, and drops any other", async () => {
+    const base = { comment: "x", kind: "feedback", platform: "native", element: "FeedRow", componentStack: [], x: 1, y: 2, boundingBox: { x: 1, y: 2, width: 0, height: 0 }, scroll: { offsetY: 0 } };
+    expect((await transport.postJsonAt(`/sessions/${SESSION}/annotations`, { ...base, id: "a-shape-point", shape: "point" })).status).toBe(201);
+    expect(((await fetchAnnotation(transport, "a-shape-point")).annotation as { shape?: string }).shape).toBe("point");
+    expect((await transport.postJsonAt(`/sessions/${SESSION}/annotations`, { ...base, id: "a-shape-bogus", shape: "octagon" })).status).toBe(201);
+    expect((await fetchAnnotation(transport, "a-shape-bogus")).annotation).not.toHaveProperty("shape");
+    const note = await createComment(transport, { ...capture(), shape: "area", areaRect: { x: 10, y: 20, width: 100, height: 50 } }, "a region", null);
+    expect(note?.shape).toBe("area");
+    expect(note?.boundingBox).toEqual({ x: 10, y: 20, width: 100, height: 50 });
+    expect((await fetchComment(transport, note!.id))?.shape).toBe("area");
+  });
+
   it("refuses a screenshot whose header says it is wider than any screen", async () => {
     await createAnnotation("a-huge-shot");
     expect((await upload("/annotations/a-huge-shot/screenshot", pngOf(20_000, 10))).status).toBe(413);
