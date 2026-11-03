@@ -1,0 +1,20 @@
+{
+  "name": "annokit",
+  "version": "0.2.0",
+  "description": "Set up AnnoKit, the dev-only in-app annotation overlay for React Native and Expo: install the package and its optional peers, wrap the app root in AnnoKitProvider, point it at a server and start the bundled stub.",
+  "author": {
+    "name": "Earlybird",
+    "url": "https://github.com/joinearlybird"
+  },
+  "homepage": "https://github.com/joinearlybird/annokit#readme",
+  "repository": "https://github.com/joinearlybird/annokit",
+  "license": "MIT",
+  "keywords": [
+    "annokit",
+    "react-native",
+    "expo",
+    "annotation",
+    "coding-agent",
+    "developer-tools"
+  ]
+}

@@ -40,6 +40,15 @@ agent at a fresh `create-expo-app` with only the skill to check it still
 works. `npx skills add . --list` from the repository root checks it is
 discoverable.
 
+The same skill reaches Claude Code as a plugin: `.claude-plugin/plugin.json`
+describes it and `.claude-plugin/marketplace.json` makes this repository
+its own marketplace, so `/plugin install annokit --marketplace
+joinearlybird/annokit` installs whatever is on `main`. Both manifests carry
+the package version; `npm run bump` writes it, and
+`test/plugin-manifest.test.ts` fails when they disagree or when a link in
+`llms.txt` (the repository's map for agents) points at a file that is gone.
+Neither file is in the npm tarball.
+
 The examples install the package from npm, as any app does. To try an
 unreleased change in one, `npm run examples:local` packs this checkout and
 installs it over the release with `--no-save`; see the
