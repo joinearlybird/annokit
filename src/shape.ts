@@ -19,6 +19,7 @@
  */
 
 import type { AimRect } from "./aim";
+import { readSketch, sketchBounds } from "./sketch";
 
 export type CaptureShape = "element" | "point" | "area" | "sketch";
 
@@ -33,10 +34,8 @@ export interface ShapedCapture {
   shape?: CaptureShape | string;
   hit?: { element?: string; frame?: AimRect } | null;
   areaRect?: AimRect;
-  /** Present on a sketch capture; its geometry is src/sketch.ts's business. */
-  sketch?: { strokes: unknown[] } | null;
-  /** A sketch capture's stroke bounds, computed by the caller that owns the sketch module. */
-  sketchRect?: AimRect;
+  /** Present on a sketch capture (src/sketch.ts); its bounds are the box. */
+  sketch?: { strokes: readonly unknown[] } | null;
 }
 
 /**
@@ -66,7 +65,10 @@ export function wireShape(c: ShapedCapture): Exclude<CaptureShape, "element"> | 
  */
 export function captureBoundingBox(c: ShapedCapture): AimRect {
   const shape = captureShape(c);
-  if (shape === "sketch" && c.sketchRect) return { ...c.sketchRect };
+  if (shape === "sketch") {
+    const sketch = readSketch(c.sketch);
+    if (sketch) return sketchBounds(sketch);
+  }
   if (shape === "area" && c.areaRect) return { ...c.areaRect };
   if (shape === "point") return { x: c.x, y: c.y, width: 0, height: 0 };
   const frame = c.hit?.frame;

@@ -378,6 +378,39 @@ describe("buildAnnotationBody — area capture", () => {
   });
 });
 
+describe("buildAnnotationBody — a sketch", () => {
+  const sketch = { strokes: [
+    { tool: "pen" as const, points: [{ x: 40, y: 300 }, { x: 280, y: 460 }] },
+    { tool: "arrow" as const, points: [{ x: 60, y: 400 }, { x: 180, y: 360 }] },
+  ] };
+
+  it("carries the strokes verbatim, boxed by their bounds, named by what was under them", () => {
+    const body = wire(buildAnnotationBody({ ...CAPTURE, sketch, shape: "sketch" }, "make this a carousel", "sk1"));
+    expect(body.shape).toBe("sketch");
+    expect(body.sketch).toEqual(sketch);
+    expect(body.boundingBox).toEqual({ x: 38.5, y: 298.5, width: 243, height: 163 });
+    expect(body.element).toBe("PrimaryButton");
+  });
+
+  it("over nothing nameable it is a Sketch, and extras ride as elements[]", () => {
+    const body = wire(buildAnnotationBody({ ...CAPTURE, hit: null, sketch }, "here", "sk2"));
+    expect(body.element).toBe("Sketch");
+    expect(body.shape).toBe("sketch");
+    const extra: InspectorHit = { element: "Badge", componentStack: ["Badge"], frame: { x: 60, y: 320, width: 40, height: 16 } };
+    const multi = wire(buildAnnotationBody({ ...CAPTURE, sketch, extraHits: [extra] }, "align", "sk3"));
+    expect(multi.isMultiSelect).toBe(true);
+    expect((multi.elements as unknown[]).length).toBe(2);
+  });
+
+  it("keeps the strokes at every Output Detail level", () => {
+    const body = buildAnnotationBody({ ...CAPTURE, sketch }, "x", "sk4");
+    for (const detail of ["minimal", "standard", "full"] as const) {
+      expect(applyOutputDetail(body, detail).sketch).toEqual(sketch);
+    }
+    expect("sketch" in wire(buildAnnotationBody(CAPTURE, "x", "sk5"))).toBe(false);
+  });
+});
+
 describe("buildAnnotationBody — a pinned spot", () => {
   const RECT = { x: 40, y: 300, width: 240, height: 160 };
   it("is about the point: zero-size box at the finger, the element kept as context", () => {

@@ -21,7 +21,9 @@ import { themedStyles, useAnnoKitTheme } from "./theme-context";
 import { placeAimChrome, placeAimLabel } from "./aim";
 import type { AimRect, AimSize, AimTarget } from "./aim";
 import { AnnoKitIcon } from "./icon";
+import type { IconName } from "./icon-set";
 import { isFabDrag } from "./fab-drag";
+import type { SketchTool } from "./sketch";
 import type { FabPoint } from "./fab-drag";
 import {
   CHIP_DEFAULT_TOP,
@@ -147,20 +149,35 @@ export function AnnoKitAreaBox({ rect }: { rect: AimRect }) {
   );
 }
 
+export type AimMode = "element" | "area" | "draw";
+
 /**
- * The armed-mode chip: Element aim, or Area rectangle. Rendered OUTSIDE the
- * capture root (it must stay tappable while armed). It starts centred near
- * the top, and can be DRAGGED anywhere — the top is where apps put headers
- * and back buttons, and a chip over an element is one nobody can aim at
- * (src/mode-chip.ts). A tap switches the mode; a press that moves past the
- * drag threshold moves the chip instead, the way the floating button works.
+ * The armed-mode chip: Element aim, Area rectangle, or Draw. Rendered
+ * OUTSIDE the capture root (it must stay tappable while armed). It starts
+ * centred near the top, and can be DRAGGED anywhere — the top is where apps
+ * put headers and back buttons, and a chip over an element is one nobody
+ * can aim at (src/mode-chip.ts). A tap on a segment picks the mode; a press
+ * that moves past the drag threshold moves the chip instead, the way the
+ * floating button works. In Draw mode a second group appears: the pen, the
+ * arrow, and undo for the last stroke. Draw is offered only when
+ * react-native-svg can draw it (src/sketch-layer.tsx).
  */
 export function AnnoKitModeToggle({
   mode,
-  onToggle,
+  onMode,
+  drawAvailable = false,
+  drawTool = "pen",
+  onDrawTool,
+  canUndo = false,
+  onUndoStroke,
 }: {
-  mode: "element" | "area";
-  onToggle: () => void;
+  mode: AimMode;
+  onMode: (mode: AimMode) => void;
+  drawAvailable?: boolean;
+  drawTool?: SketchTool;
+  onDrawTool?: (tool: SketchTool) => void;
+  canUndo?: boolean;
+  onUndoStroke?: () => void;
 }) {
   const { palette: p } = useAnnoKitTheme();
   const styles = useStyles();
@@ -184,8 +201,8 @@ export function AnnoKitModeToggle({
     return () => pos.removeListener(id);
   }, [pos]);
 
-  // First layout places it (centred, or where it was left); a rotation or a
-  // wider label pulls it back on screen.
+  // First layout places it (centred, or where it was left); a rotation, a
+  // wider label or the Draw tools appearing pulls it back on screen.
   useEffect(() => {
     if (!size) return;
     const target = clampChipPosition(recallChipPosition() ?? defaultChipPosition(screen, size), screen, size);
@@ -196,7 +213,7 @@ export function AnnoKitModeToggle({
   const responder = useMemo(
     () =>
       PanResponder.create({
-        // Never on touch-down: that touch belongs to the Pressable (the toggle).
+        // Never on touch-down: that touch belongs to the Pressable (a segment).
         onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponder: (_e, g) => isFabDrag(g.dx, g.dy),
         onPanResponderGrant: () => {
@@ -214,7 +231,7 @@ export function AnnoKitModeToggle({
         },
         onPanResponderRelease: () => {
           rememberChipPosition(posRef.current);
-          // After the release's own press handling, so a drag never toggles.
+          // After the release's own press handling, so a drag never picks.
           setTimeout(() => (dragging.current = false), 0);
         },
         onPanResponderTerminate: () => {
@@ -223,6 +240,35 @@ export function AnnoKitModeToggle({
         },
       }),
     [pos],
+  );
+
+  const tap = (fn: () => void) => () => {
+    if (!dragging.current) fn();
+  };
+  const segment = (
+    key: string,
+    selected: boolean,
+    icon: IconName,
+    label: string,
+    a11y: string,
+    onPress: () => void,
+    disabled = false,
+    iconSize = 12,
+  ) => (
+    <Pressable
+      key={key}
+      testID={`annokit-mode-${key}`}
+      onPress={tap(onPress)}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityState={{ selected, disabled }}
+      accessibilityLabel={a11y}
+      accessibilityHint="Drag to move the chip out of the way"
+      style={({ pressed }) => [styles.modeBtn, selected && styles.modeBtnActive, disabled && styles.modeBtnDisabled, pressed && styles.pressed]}
+    >
+      <AnnoKitIcon name={icon} size={iconSize} color={selected ? p.onAccent : p.chromeInk} />
+      {label ? <Text style={[styles.modeText, selected && styles.modeTextActive]}>{label}</Text> : null}
+    </Pressable>
   );
 
   return (
@@ -241,25 +287,19 @@ export function AnnoKitModeToggle({
       ]}
       {...responder.panHandlers}
     >
-      <Pressable
-        onPress={() => {
-          if (!dragging.current) onToggle();
-        }}
-        accessibilityRole="button"
-        // A toggle between two aiming modes: "selected" says which one is
-        // in force without the label having to carry it twice.
-        accessibilityState={{ selected: mode === "area" }}
-        accessibilityLabel={
-          mode === "element"
-            ? "Aiming at elements. Switch to selecting an area"
-            : "Selecting an area. Switch to aiming at elements"
-        }
-        accessibilityHint="Drag to move it out of the way"
-        style={({ pressed }) => [styles.modeBtn, pressed && styles.pressed]}
-      >
-        <AnnoKitIcon name={mode === "element" ? "annotate" : "area"} size={12} color={p.chromeInk} />
-        <Text style={styles.modeText}>{mode === "element" ? "Element" : "Area"}</Text>
-      </Pressable>
+      <View style={styles.modeRow}>
+        {segment("element", mode === "element", "annotate", "Element", "Aim at elements", () => onMode("element"))}
+        {segment("area", mode === "area", "area", "Area", "Select an area", () => onMode("area"))}
+        {drawAvailable && segment("draw", mode === "draw", "draw", "Draw", "Draw over the screen", () => onMode("draw"))}
+      </View>
+      {mode === "draw" && (
+        <View style={[styles.modeRow, styles.modeTools]} testID="annokit-draw-tools">
+          {/* Words as well as icons: a 12pt arrow alone did not read as a tool (device testing). */}
+          {segment("pen", drawTool === "pen", "draw", "Pen", "Pen", () => onDrawTool?.("pen"), false, 14)}
+          {segment("arrow", drawTool === "arrow", "arrow", "Arrow", "Arrow", () => onDrawTool?.("arrow"), false, 14)}
+          {segment("undo", false, "undo", "Undo", "Undo the last stroke", () => onUndoStroke?.(), !canUndo, 14)}
+        </View>
+      )}
     </Animated.View>
   );
 }
@@ -444,18 +484,39 @@ const useStyles = themedStyles((p) => ({
     shadowOffset: { width: 0, height: 2 },
     elevation: 6,
   },
+  modeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 3,
+    paddingVertical: 3,
+    gap: 2,
+  },
+  modeTools: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: p.chromeBorder,
+    justifyContent: "center",
+  },
   modeBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    paddingVertical: 6,
-    paddingHorizontal: 11,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
     borderRadius: 999,
+  },
+  modeBtnActive: {
+    backgroundColor: p.agent,
+  },
+  modeBtnDisabled: {
+    opacity: 0.4,
   },
   modeText: {
     color: p.chromeInk,
     fontSize: 12,
     fontWeight: "600",
+  },
+  modeTextActive: {
+    color: p.onAccent,
   },
   confirmBtn: {
     flexDirection: "row",

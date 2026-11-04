@@ -110,6 +110,18 @@ export const ICON_REFRESH = "\u21bb";
  */
 export const ICON_SETTINGS = "\u2699\ufe0e";
 
+/**
+ * DRAW MODE, on the armed-mode chip: a pencil at a different angle from the
+ * Annotate pencil, with the text selector like it. The chip's two pencils
+ * mean two things — mark an element, draw over the screen — and differ in
+ * the drawn icon; in text they can only differ this much.
+ */
+export const ICON_DRAW = "\u270e\ufe0e";
+/** ARROW tool, in Draw mode. U+2197 is emoji-presentation on iOS without the selector. */
+export const ICON_ARROW = "\u2197\ufe0e";
+/** UNDO the last stroke. U+21B6, a plain arrow with no emoji presentation. */
+export const ICON_UNDO = "\u21b6";
+
 /** Every glyph the overlay draws — the guard test iterates this. */
 export const OVERLAY_ICONS = [
   ICON_PENCIL,
@@ -129,4 +141,7 @@ export const OVERLAY_ICONS = [
   ICON_EXPAND,
   ICON_MINIMIZE,
   ICON_REFRESH,
+  ICON_DRAW,
+  ICON_ARROW,
+  ICON_UNDO,
 ] as const;

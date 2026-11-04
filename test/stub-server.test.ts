@@ -541,6 +541,17 @@ describe("bad input", () => {
     expect((await fetchComment(transport, note!.id))?.shape).toBe("area");
   });
 
+  it("keeps a sketch's strokes as sent, and drops a sketch it cannot read", async () => {
+    const base = { comment: "x", kind: "feedback", platform: "native", element: "Card", componentStack: [], x: 1, y: 2, boundingBox: { x: 1, y: 2, width: 10, height: 10 }, scroll: { offsetY: 0 }, shape: "sketch" };
+    const sketch = { strokes: [{ tool: "pen", points: [{ x: 1.5, y: 2 }, { x: 30, y: 40 }] }, { tool: "arrow", points: [{ x: 0, y: 0 }, { x: 9, y: 9 }] }] };
+    expect((await transport.postJsonAt(`/sessions/${SESSION}/annotations`, { ...base, id: "a-sketch", sketch })).status).toBe(201);
+    expect(((await fetchAnnotation(transport, "a-sketch")).annotation as { sketch?: unknown }).sketch).toEqual(sketch);
+    expect((await transport.postJsonAt(`/sessions/${SESSION}/annotations`, { ...base, id: "a-sketch-bad", sketch: { strokes: [{ tool: "laser", points: [{ x: 1, y: 1 }] }] } })).status).toBe(201);
+    expect((await fetchAnnotation(transport, "a-sketch-bad")).annotation).not.toHaveProperty("sketch");
+    expect((await transport.postJsonAt(`/sessions/${SESSION}/annotations`, { ...base, id: "a-sketch-nan", sketch: { strokes: [{ tool: "pen", points: [{ x: "1", y: 1 }] }] } })).status).toBe(201);
+    expect((await fetchAnnotation(transport, "a-sketch-nan")).annotation).not.toHaveProperty("sketch");
+  });
+
   it("refuses a screenshot whose header says it is wider than any screen", async () => {
     await createAnnotation("a-huge-shot");
     expect((await upload("/annotations/a-huge-shot/screenshot", pngOf(20_000, 10))).status).toBe(413);

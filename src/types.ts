@@ -2,6 +2,7 @@ import type { AnnotationReference } from "./attachments";
 import type { DeviceInfo } from "./device";
 import type { InspectorHit } from "./inspector";
 import type { CaptureShape } from "./shape";
+import type { Sketch } from "./sketch";
 import type { ThreadMessage } from "./thread";
 
 /** A captured tap awaiting composition. */
@@ -31,6 +32,12 @@ export interface PendingCapture {
    * element capture, or whatever `areaRect`/`sketch` say it is.
    */
   shape?: CaptureShape;
+  /**
+   * The strokes of a Draw-mode capture (src/sketch.ts), window coordinates.
+   * Their bounds are the annotation's boundingBox; `hit`/`extraHits` are
+   * the components found under them.
+   */
+  sketch?: Sketch;
   /** Route at capture time. */
   routeName: string | null;
   /**
@@ -97,6 +104,8 @@ export interface ServerAnnotation {
   boundingBox?: { x: number; y: number; width: number; height: number } | null;
   /** The capture's shape, when the server kept what was sent (src/shape.ts). Absent = element. */
   shape?: string;
+  /** A sketch's strokes, when the server kept them; read with `readSketch` (src/sketch.ts). */
+  sketch?: unknown;
   routeName?: string;
   /**
    * Owning-scroll-container offset at capture, when the server kept what

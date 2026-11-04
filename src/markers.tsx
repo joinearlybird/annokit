@@ -69,6 +69,8 @@ import {
 } from "./marker-hit";
 import type { MarkerPlacement } from "./marker-hit";
 import { markerTaskCountLabel } from "./message-task";
+import { readSketch, shiftSketch } from "./sketch";
+import { AnnoKitSketchLayer } from "./sketch-layer";
 import { useReduceMotion } from "./reduce-motion";
 import {
   advanceAnchorTrack,
@@ -405,8 +407,16 @@ export function AnnoKitMarkers({
     openMark && openRecord && openRecord.boundingBox && openRecord.x !== undefined
       ? openRecord
       : undefined;
+  // The open item's strokes, where its element is now: the same shift the
+  // boundary box gets. A sketch that is not open draws nothing — red ink
+  // over the app for every past task would be noise.
+  const openSketch = openStored && openStored.shape === "sketch" ? readSketch(openStored.sketch) : null;
+  const openShift = openMark && openStored
+    ? { dx: openMark.x - (openStored.x ?? openMark.x), dy: openMark.y - (openStored.y ?? openMark.y) }
+    : { dx: 0, dy: 0 };
   return (
     <>
+      {openSketch && <AnnoKitSketchLayer strokes={shiftSketch(openSketch, openShift.dx, openShift.dy).strokes} />}
       {openMark && (openLiveRect || openStored?.boundingBox) ? (
         <View
           pointerEvents="none"
