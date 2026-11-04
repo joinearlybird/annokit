@@ -98,7 +98,7 @@ export const LUCIDE_NAMES: Record<IconName, string> = {
   refresh: "rotate-cw",
   gear: "settings",
   draw: "pen-line",
-  arrow: "move-up-right",
+  arrow: "arrow-up-right",
   undo: "undo-2",
 };
 
@@ -175,7 +175,7 @@ export const ICON_PATHS: Record<IconName, readonly string[]> = {
     "M12 20h9",
     "M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z",
   ],
-  arrow: ["M13 5H19V11", "M19 5L5 19"],
+  arrow: ["M7 7h10v10", "M7 17 17 7"],
   undo: ["M9 14 4 9l5-5", "M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"],
 };
 

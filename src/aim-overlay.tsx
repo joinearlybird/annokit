@@ -253,6 +253,7 @@ export function AnnoKitModeToggle({
     a11y: string,
     onPress: () => void,
     disabled = false,
+    iconSize = 12,
   ) => (
     <Pressable
       key={key}
@@ -265,7 +266,7 @@ export function AnnoKitModeToggle({
       accessibilityHint="Drag to move the chip out of the way"
       style={({ pressed }) => [styles.modeBtn, selected && styles.modeBtnActive, disabled && styles.modeBtnDisabled, pressed && styles.pressed]}
     >
-      <AnnoKitIcon name={icon} size={12} color={selected ? p.onAccent : p.chromeInk} />
+      <AnnoKitIcon name={icon} size={iconSize} color={selected ? p.onAccent : p.chromeInk} />
       {label ? <Text style={[styles.modeText, selected && styles.modeTextActive]}>{label}</Text> : null}
     </Pressable>
   );
@@ -293,9 +294,10 @@ export function AnnoKitModeToggle({
       </View>
       {mode === "draw" && (
         <View style={[styles.modeRow, styles.modeTools]} testID="annokit-draw-tools">
-          {segment("pen", drawTool === "pen", "draw", "", "Pen", () => onDrawTool?.("pen"))}
-          {segment("arrow", drawTool === "arrow", "arrow", "", "Arrow", () => onDrawTool?.("arrow"))}
-          {segment("undo", false, "undo", "", "Undo the last stroke", () => onUndoStroke?.(), !canUndo)}
+          {/* Words as well as icons: a 12pt arrow alone did not read as a tool (device testing). */}
+          {segment("pen", drawTool === "pen", "draw", "Pen", "Pen", () => onDrawTool?.("pen"), false, 14)}
+          {segment("arrow", drawTool === "arrow", "arrow", "Arrow", "Arrow", () => onDrawTool?.("arrow"), false, 14)}
+          {segment("undo", false, "undo", "Undo", "Undo the last stroke", () => onUndoStroke?.(), !canUndo, 14)}
         </View>
       )}
     </Animated.View>
