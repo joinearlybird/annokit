@@ -13,7 +13,7 @@
 
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,6 +40,20 @@ const SESSION = "stub-test-session";
 const APP_FIXTURE = fileURLToPath(new URL("./fixtures/app", import.meta.url));
 const LOGO = join(APP_FIXTURE, "assets", "brand", "logo.png");
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+
+/** A PNG signature and an IHDR chunk naming `width`×`height`: enough for the stub to size it. */
+function pngOf(width: number, height: number): Buffer {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; ihdr[9] = 6; // bit depth, RGBA
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(13, 0);
+  return Buffer.concat([PNG.subarray(0, 8), length, Buffer.from("IHDR"), ihdr, Buffer.alloc(4)]);
+}
+
+/** The stub's screenshot mirror for a port. */
+const shotDir = (port: number) => join(tmpdir(), `annokit-${port}`, "screenshots");
 
 let stub: ChildProcess;
 let endpoint: string;
@@ -515,6 +529,12 @@ describe("bad input", () => {
     expect((await fetchAnnotation(transport, "a-device-none")).annotation).not.toHaveProperty("device");
   });
 
+  it("refuses a screenshot whose header says it is wider than any screen", async () => {
+    await createAnnotation("a-huge-shot");
+    expect((await upload("/annotations/a-huge-shot/screenshot", pngOf(20_000, 10))).status).toBe(413);
+    expect((await upload("/annotations/a-huge-shot/screenshot", pngOf(402, 874))).status).toBe(201);
+  });
+
   it("answers an oversized body with 413 and keeps running", async () => {
     const res = await fetch(`${endpoint}/comments`, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -889,8 +909,147 @@ describe("screenshot memory", () => {
       const second = await shotOf("c2");
       expect((await fetch(first)).status).toBe(404);
       expect((await fetch(second)).status).toBe(200);
+      // The disk mirror follows the memory store: the evicted file is gone,
+      // the kept one is there under the server-minted id.
+      const dir = shotDir(port);
+      expect(existsSync(join(dir, `${first.split("/").pop()}.png`))).toBe(false);
+      expect(existsSync(join(dir, `${second.split("/").pop()}.png`))).toBe(true);
+      // Deleting the task takes its file with it.
+      expect((await fetch(`http://127.0.0.1:${port}/annotations/c2`, { method: "DELETE" })).ok).toBe(true);
+      expect(existsSync(join(dir, `${second.split("/").pop()}.png`))).toBe(false);
+      // And the whole directory goes when the stub is told to stop.
+      expect(existsSync(dir)).toBe(true);
+      capped.kill("SIGTERM");
+      await once(capped, "exit");
+      expect(existsSync(join(tmpdir(), `annokit-${port}`))).toBe(false);
     } finally {
       capped.kill();
     }
   });
+});
+
+// ── the agent is handed the picture ───────────────────────────────────────
+//
+// A screenshot the overlay uploads is for the agent as much as for the team:
+// the stub keeps a copy on disk and the prompt names it, with the task's box
+// and how the image's pixels relate to window points — worked out from the
+// PNG's own header, not from anything the client said.
+
+describe("the agent sees the screenshot", () => {
+  let agentStub: ChildProcess;
+  let base: string;
+  let port: number;
+  const bin = mkdtempSync(join(tmpdir(), "annokit-fake-agent-shot-"));
+
+  beforeAll(async () => {
+    writeFileSync(
+      join(bin, "claude"),
+      [
+        "#!/bin/sh",
+        '[ "$1" = "--version" ] && { echo 1.0; exit 0; }',
+        `[ "$1" = "auth" ] && { echo '{"loggedIn": true}'; exit 0; }`,
+        `[ "$2" = "--input-format" ] && exit 0`,
+        `printf '%s' "$2" > "${join(bin, "prompt.txt")}"`,
+        `shift 2; echo "$@" > "${join(bin, "args.txt")}"`,
+        `printf '%s\\n' '{"type":"result","result":"Looked at it.\\nTitle: Looked"}'`,
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+    port = await freePort();
+    agentStub = spawn(process.execPath, [STUB, "--port", String(port), "--agent=claude"], {
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, AGENT_DIR: bin, AGENT_CMD: "" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    await new Promise<void>((resolve, reject) => {
+      agentStub.stdout!.on("data", (chunk: Buffer) => { if (chunk.toString().includes("stub —")) resolve(); });
+      agentStub.once("exit", (code) => reject(new Error(`stub exited with ${code}`)));
+    });
+    base = `http://127.0.0.1:${port}`;
+  });
+
+  afterAll(() => { agentStub?.kill(); });
+
+  const post = (path: string, body: unknown) =>
+    fetch(`${base}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const uploadTo = (path: string, bytes: Buffer) => {
+    const boundary = "shot-boundary";
+    return fetch(`${base}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body: Buffer.concat([
+        Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="s.png"\r\nContent-Type: image/png\r\n\r\n`),
+        bytes,
+        Buffer.from(`\r\n--${boundary}--\r\n`),
+      ]),
+    });
+  };
+  const settle = async (id: string) => {
+    let a = (await (await fetch(`${base}/annotations/${id}`)).json()) as { status: string; references?: { type: string; value: string }[] };
+    for (let i = 0; i < 80 && a.status !== "sent"; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      a = (await (await fetch(`${base}/annotations/${id}`)).json()) as typeof a;
+    }
+    expect(a.status).toBe("sent");
+    return a;
+  };
+
+  it("keeps the upload on disk and names it, the box and the scale in the prompt", async () => {
+    await post("/sessions", { id: "ss", url: "/" });
+    await post("/sessions/ss/annotations", {
+      id: "s1", comment: "Make it pop", element: "Card", componentStack: ["HomeScreen", "Card"],
+      x: 84, y: 189.4, boundingBox: { x: 52, y: 179.7, width: 62, height: 17 },
+      isMultiSelect: true,
+      elements: [
+        { element: "Card", componentStack: [], boundingBox: { x: 52, y: 179.7, width: 62, height: 17 } },
+        { element: "Subtitle", componentStack: [], boundingBox: { x: 52, y: 200, width: 120, height: 14 } },
+      ],
+      device: { platform: "ios", osVersion: "26.0", idiom: "phone", window: { width: 402, height: 874 }, pixelRatio: 3, fontScale: 1, colorScheme: "dark", orientation: "portrait" },
+    });
+    expect((await uploadTo("/annotations/s1/screenshot?marks=badge,outline", pngOf(402, 874))).status).toBe(201);
+    const stored = (await (await fetch(`${base}/annotations/s1`)).json()) as { references: { type: string; value: string }[] };
+    const shotId = stored.references.find((r) => r.type === "screenshot")!.value.split("/").pop()!;
+    const path = join(shotDir(port), `${shotId}.png`);
+    expect(existsSync(path)).toBe(true);
+    expect(readFileSync(path).subarray(0, 8)).toEqual(PNG.subarray(0, 8));
+
+    await post("/annotations/send", { annotationIds: ["s1"] });
+    await settle("s1");
+    const prompt = readFileSync(join(bin, "prompt.txt"), "utf8");
+    expect(prompt).toContain(`SCREENSHOT: ${path} (1x: one pixel is one point)`);
+    expect(prompt).toContain("the element's box in it: (52, 180, 62×17); the tap at (84, 189)");
+    expect(prompt).toContain("our marker for this task is burned in as a numbered badge");
+    expect(prompt).toContain("box (window points): (52, 180, 62×17); tap at (84, 189)");
+    expect(prompt).toContain("component stack: HomeScreen > Card");
+    expect(prompt).toContain("covers: Card (52, 180, 62×17); Subtitle (52, 200, 120×14)");
+    expect(prompt).toContain("DEVICE: iPhone · iOS 26.0 · 402×874 pt @3x · dark · font scale 1.0");
+    // Claude Code reads the file itself; no image flag on its command line.
+    expect(readFileSync(join(bin, "args.txt"), "utf8")).not.toContain(path);
+
+    // A follow-up names the picture again, so a resumed or fresh run can look.
+    await post("/annotations/s1/thread", { content: "A bit more" });
+    await post("/annotations/send", { annotationIds: ["s1"] });
+    await settle("s1");
+    expect(readFileSync(join(bin, "prompt.txt"), "utf8")).toContain(`SCREENSHOT (from the original request): ${path}`);
+  }, 20_000);
+
+  it("works the scale out from the image, and hedges when the client said nothing about marks", async () => {
+    await post("/sessions/ss/annotations", {
+      id: "s2", comment: "Bigger", element: "Card", x: 10, y: 20, boundingBox: { x: 0, y: 0, width: 10, height: 10 },
+      device: { platform: "ios", window: { width: 402, height: 874 }, pixelRatio: 3, fontScale: 1, colorScheme: null, orientation: "portrait" },
+    });
+    expect((await uploadTo("/annotations/s2/screenshot", pngOf(1206, 2622))).status).toBe(201);
+    await post("/annotations/send", { annotationIds: ["s2"] });
+    await settle("s2");
+    const prompt = readFileSync(join(bin, "prompt.txt"), "utf8");
+    expect(prompt).toMatch(/SCREENSHOT: .*\.png \(3\.0x: multiply the point coordinates below by that/);
+    expect(prompt).toContain("the screen as the user saw it, with any task markers the overlay was showing");
+    expect(prompt).not.toContain("burned in");
+
+    // No device: the prompt gives the pixel size and no claim about points.
+    await post("/sessions/ss/annotations", { id: "s3", comment: "Hm", element: "Card", x: 1, y: 1, boundingBox: { x: 0, y: 0, width: 1, height: 1 } });
+    await uploadTo("/annotations/s3/screenshot", pngOf(640, 480));
+    await post("/annotations/send", { annotationIds: ["s3"] });
+    await settle("s3");
+    expect(readFileSync(join(bin, "prompt.txt"), "utf8")).toMatch(/SCREENSHOT: .*\.png \(640×480 px\)/);
+  }, 20_000);
 });
