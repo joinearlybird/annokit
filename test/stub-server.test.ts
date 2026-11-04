@@ -478,6 +478,43 @@ describe("bad input", () => {
     expect((await fetchAnnotation(transport, "a-garbled")).annotation?.status).toBe("pending");
   });
 
+  it("keeps a well-formed device, and drops or clamps a hostile one", async () => {
+    const good = {
+      platform: "ios", osVersion: "26.0", idiom: "phone", window: { width: 402, height: 874 },
+      pixelRatio: 3, fontScale: 1, colorScheme: "dark", orientation: "portrait",
+    };
+    let res = await transport.postJsonAt(`/sessions/${SESSION}/annotations`, {
+      id: "a-device-good", comment: "x", kind: "feedback", platform: "native", element: "FeedRow",
+      componentStack: [], x: 1, y: 2, boundingBox: { x: 0, y: 0, width: 1, height: 1 }, scroll: { offsetY: 0 },
+      device: good,
+    });
+    expect(res.status).toBe(201);
+    expect(((await fetchAnnotation(transport, "a-device-good")).annotation as { device?: unknown }).device).toEqual(good);
+
+    res = await transport.postJsonAt(`/sessions/${SESSION}/annotations`, {
+      id: "a-device-bad", comment: "x", kind: "feedback", platform: "native", element: "FeedRow",
+      componentStack: [], x: 1, y: 2, boundingBox: { x: 0, y: 0, width: 1, height: 1 }, scroll: { offsetY: 0 },
+      device: {
+        platform: "android", model: "m".repeat(10_000), osVersion: 15, idiom: "watch", window: { width: 411, height: 914 },
+        pixelRatio: -1, fontScale: "big", colorScheme: "sepia", orientation: "diagonal", simulator: "yes", extra: { deep: true },
+      },
+    });
+    expect(res.status).toBe(201);
+    const stored = ((await fetchAnnotation(transport, "a-device-bad")).annotation as { device?: Record<string, unknown> }).device!;
+    expect(stored).toEqual({
+      platform: "android", model: "m".repeat(80), window: { width: 411, height: 914 },
+      pixelRatio: 1, fontScale: 1, colorScheme: null, orientation: "portrait",
+    });
+
+    res = await transport.postJsonAt(`/sessions/${SESSION}/annotations`, {
+      id: "a-device-none", comment: "x", kind: "feedback", platform: "native", element: "FeedRow",
+      componentStack: [], x: 1, y: 2, boundingBox: { x: 0, y: 0, width: 1, height: 1 }, scroll: { offsetY: 0 },
+      device: { platform: "amiga", window: { width: 640, height: 512 } },
+    });
+    expect(res.status).toBe(201);
+    expect((await fetchAnnotation(transport, "a-device-none")).annotation).not.toHaveProperty("device");
+  });
+
   it("answers an oversized body with 413 and keeps running", async () => {
     const res = await fetch(`${endpoint}/comments`, {
       method: "POST", headers: { "Content-Type": "application/json" },

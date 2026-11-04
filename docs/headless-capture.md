@@ -43,6 +43,7 @@ the aim is confirmed. No screenshot has been taken yet — call
 | `hit.styles`, `hit.accessibility` | flattened style / a11y summary |
 | `extraHits`, `areaRect` | area-capture extras and the drawn rectangle |
 | `routeName` | expo-router pathname at capture |
+| `device` | the device at capture time: platform, OS version, window size in points, pixel ratio, font scale, colour scheme, orientation (`readDevice()` is exported for hosts that build their own captures) |
 | `screenshotUri` | null until a screenshot is asked for; then a temp `file://` (native) or `data:` (web) |
 | `canScreenshot` | whether one COULD be taken here (peer present, host allows, server has the route) |
 
@@ -120,8 +121,9 @@ nothing of them for the overlay to read back).
 
 For anything the helpers do not cover, the protocol-speaking internals are
 public: `buildAnnotationBody`, `applyOutputDetail`, `buildCaptureBody`,
-`submitAgentCapture`, `submitCommentCapture`, `AnnoKitTransport`, and the
-`PendingCapture` / `AnnotationBody` / `AgentSubmitOptions` types. The wire
+`submitAgentCapture`, `submitCommentCapture`, `AnnoKitTransport`,
+`readDevice` / `describeDevice`, and the `PendingCapture` /
+`AnnotationBody` / `AgentSubmitOptions` / `DeviceInfo` types. The wire
 contract itself is the [AnnoKit Protocol v1](./protocol.md).
 
 ## Semantics worth knowing

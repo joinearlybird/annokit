@@ -83,6 +83,14 @@ describe("buildCaptureBody", () => {
     expect(JSON.stringify(minimal).length).toBeLessThan(JSON.stringify(full).length);
   });
 
+  it("carries the capture's device from Standard up, and never at Minimal", () => {
+    const device = { platform: "ios", window: { width: 402, height: 874 }, pixelRatio: 3, fontScale: 1, colorScheme: null, orientation: "portrait" } as const;
+    const withDevice: PendingCapture = { ...CAPTURE, device };
+    expect(buildCaptureBody(withDevice, "x").device).toEqual(device);
+    expect(buildCaptureBody(withDevice, "x", { outputDetail: "full" }).device).toEqual(device);
+    expect(buildCaptureBody(withDevice, "x", { outputDetail: "minimal" }).device).toBeUndefined();
+  });
+
   it("carries the chosen agent, at every Output Detail, and nothing when none was chosen", () => {
     expect(buildCaptureBody(CAPTURE, "x").agent).toBeUndefined();
     const run = { agent: "codex", model: "gpt-6", modelLabel: "GPT-6", effort: "high" };
