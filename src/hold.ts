@@ -11,7 +11,11 @@
  *   down(x, y)   arms one timer and remembers the origin
  *   move(x, y)   past `slop` from the origin DISARMS, for the rest of the
  *                gesture — coming back does not re-arm; the user is
- *                surveying, not holding
+ *                surveying, not holding. The same move after the hold has
+ *                FIRED hands the gesture back: a finger that rested, then
+ *                set off to survey, releases as an ordinary select, not as
+ *                the pin it paused on — otherwise the drag's highlight ends
+ *                with no confirm bar at all
  *   (timer)      fires `onHold(origin)` once — the ORIGIN, not the last
  *                sub-slop wobble, because that is where the finger meant
  *   up()         ends the gesture; returns true when a hold already fired,
@@ -74,8 +78,11 @@ export function createHoldDetector({
       }, holdMs);
     },
     move(x, y) {
-      if (!origin || timer === null) return;
-      if (Math.abs(x - origin.x) > slop || Math.abs(y - origin.y) > slop) disarm();
+      if (!origin || (timer === null && !fired)) return;
+      if (Math.abs(x - origin.x) > slop || Math.abs(y - origin.y) > slop) {
+        disarm();
+        fired = false;
+      }
     },
     up() {
       disarm();

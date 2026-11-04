@@ -48,6 +48,29 @@ describe("createHoldDetector", () => {
     vi.useRealTimers();
   });
 
+  it("a drag after the hold fired hands the release back to the ordinary select", () => {
+    vi.useFakeTimers();
+    const { hold, held } = detector();
+    hold.down(100, 200);
+    vi.advanceTimersByTime(HOLD_MS);
+    expect(held).toEqual([[100, 200]]);
+    // The finger rested, pinned, then set off to survey: the drag's release selects.
+    hold.move(100 + HOLD_SLOP + 1, 200);
+    hold.move(160, 260);
+    expect(hold.up()).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it("a wobble after the hold fired keeps the pin", () => {
+    vi.useFakeTimers();
+    const { hold } = detector();
+    hold.down(100, 200);
+    vi.advanceTimersByTime(HOLD_MS);
+    hold.move(100 + HOLD_SLOP - 1, 200);
+    expect(hold.up()).toBe(true);
+    vi.useRealTimers();
+  });
+
   it("a release before the hold time is an ordinary tap", () => {
     vi.useFakeTimers();
     const { hold, held } = detector();
