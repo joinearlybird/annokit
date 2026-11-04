@@ -366,6 +366,12 @@ export interface AimSelection<H extends AimHit = AimHit> {
   target: AimTarget | null;
   /** True once the gesture ended and this is the committed selection. */
   final: boolean;
+  /**
+   * True when a press-and-hold PINNED this spot (src/hold.ts): the point is
+   * the subject and `hit` is only the context under it. The capture it
+   * becomes has shape "point" (src/shape.ts).
+   */
+  pinned?: boolean;
 }
 
 /**
@@ -380,6 +386,14 @@ export interface AimSelection<H extends AimHit = AimHit> {
 export function aimAnchorTarget<H extends AimHit = AimHit>(
   selection: AimSelection<H>,
 ): AimTarget {
+  // A pinned spot anchors at the finger even when the element under it has
+  // a frame: the point is what the user chose, and the label says so.
+  if (selection.pinned) {
+    return {
+      frame: { x: selection.x, y: selection.y, width: 0, height: 0 },
+      label: selection.hit ? `this spot on ${formatAimLabel(selection.hit)}` : "this spot",
+    };
+  }
   if (selection.target) return selection.target;
   return {
     frame: { x: selection.x, y: selection.y, width: 0, height: 0 },
@@ -392,6 +406,11 @@ export interface AimTracker {
   aim: (x: number, y: number) => void;
   /** Finger lifted at (x, y) — resolve it fully and keep it selected. */
   select: (x: number, y: number) => void;
+  /**
+   * Finger HELD at (x, y) — resolve it fully and keep it selected as a
+   * pinned spot: the element under it is context, the point is the subject.
+   */
+  pin: (x: number, y: number) => void;
   /** Drop the selection and forget any in-flight work. */
   clear: () => void;
 }
@@ -439,7 +458,7 @@ export function createAimTracker<H extends AimHit = AimHit>({
   let seq = 0;
   let generation = 0;
 
-  const run = (point: { x: number; y: number; final: boolean }) => {
+  const run = (point: { x: number; y: number; final: boolean; pinned?: boolean }) => {
     const mySeq = ++seq;
     const myGeneration = generation;
     void (async () => {
@@ -452,7 +471,7 @@ export function createAimTracker<H extends AimHit = AimHit>({
       if (mySeq !== seq || myGeneration !== generation) return;
       const target = aimTargetFromHit(hit);
       if (target || point.final) {
-        onSelection({ x: point.x, y: point.y, hit, target, final: point.final });
+        onSelection({ x: point.x, y: point.y, hit, target, final: point.final, ...(point.pinned ? { pinned: true } : {}) });
       } else {
         onSelection(null);
       }
@@ -470,6 +489,10 @@ export function createAimTracker<H extends AimHit = AimHit>({
       // any queued survey position is now stale.
       throttle.cancel();
       run({ x, y, final: true });
+    },
+    pin(x: number, y: number) {
+      throttle.cancel();
+      run({ x, y, final: true, pinned: true });
     },
     clear() {
       throttle.cancel();

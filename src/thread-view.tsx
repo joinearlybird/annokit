@@ -34,6 +34,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Alert, Image, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { TEXT_MAX } from "./limits";
+import { detailTitle } from "./shape";
 import { serverFlavor } from "./agentation";
 import { onAnnoKitEvent, streamLive as readStreamLive, subscribeToStreamLive } from "./events";
 import { themedStyles, useAnnoKitTheme } from "./theme-context";
@@ -357,7 +358,7 @@ export function AnnoKitThreadView({
       destination="agent"
       onCovered={onCovered}
       pushing={pushing}
-      title={annotation.element || "This screen"}
+      title={detailTitle(annotation)}
       sourceRef={sourceRef(origin.source)}
       route={routeDisplay(origin.routeName)}
       contextLabel={detailContextLabel(origin)}

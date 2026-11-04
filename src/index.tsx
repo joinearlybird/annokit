@@ -44,6 +44,7 @@ import {
   AnnoKitAimConfirm,
   AnnoKitAreaBox,
   AnnoKitModeToggle,
+  AnnoKitPinDot,
 } from "./aim-overlay";
 import { areaLabel, areaRectFrom, areaSamplePoints, dedupeAreaHits, isAreaMeaningful } from "./area";
 import { AnnoKitAreaPad, AnnoKitCaptureRoot } from "./capture";
@@ -90,6 +91,7 @@ import {
   setScreenshotsEnabled,
 } from "./screenshot";
 import { readDevice } from "./device";
+import { createHoldDetector } from "./hold";
 import { subscribeToShake } from "./shake";
 import type { AnnoKitTimeouts } from "./transport";
 import { AnnoKitTransport, makeId } from "./transport";
@@ -145,6 +147,7 @@ export type { ViewerIdentity, ViewerSource } from "./viewer";
 export { viewerIdentity } from "./viewer";
 export type { PendingCapture, ServerAnnotation } from "./types";
 export type { DeviceInfo, DeviceSources } from "./device";
+export type { CaptureShape } from "./shape";
 export { describeDevice, readDevice } from "./device";
 // ── Headless capture (bring your own UI over our capture engine) ──────────
 // `onCapture` on the provider hands hosts the capture + these helpers; the
@@ -1117,12 +1120,24 @@ function AnnoKitRuntime({
     [],
   );
 
+  // HOLD TO PIN (src/hold.ts): a press that stays put for a beat pins the
+  // spot under the finger instead of selecting the element there. Same
+  // lifetime as the tracker, for the same reason.
+  const hold = useMemo(() => createHoldDetector({ onHold: (x, y) => tracker.pin(x, y) }), [tracker]);
+  useEffect(() => () => hold.cancel(), [hold]);
+
   // The gesture callbacks read the mode through a ref: they are handed to
   // the capture root once, and a mode flip mid-gesture must not swap the
   // handler out from under a finger that is still down.
   const aimModeRef = useRef(aimMode);
   aimModeRef.current = aimMode;
 
+  const onAimStart = useCallback(
+    (x: number, y: number) => {
+      if (aimModeRef.current === "element") hold.down(x, y);
+    },
+    [hold],
+  );
   const onAim = useCallback(
     (x: number, y: number, rootRef: unknown) => {
       rootViewRef.current = rootRef;
@@ -1132,13 +1147,16 @@ function AnnoKitRuntime({
         setAreaDraft(areaRectFrom(areaOriginRef.current, { x, y }));
         return;
       }
+      hold.move(x, y);
       tracker.aim(x, y);
     },
-    [tracker],
+    [tracker, hold],
   );
   const onSelect = useCallback(
     (x: number, y: number, rootRef: unknown) => {
       rootViewRef.current = rootRef;
+      // A hold already pinned this spot: the release is spoken for.
+      if (aimModeRef.current === "element" && hold.up()) return;
       if (aimModeRef.current === "area") {
         const origin = areaOriginRef.current;
         areaOriginRef.current = null;
@@ -1173,23 +1191,25 @@ function AnnoKitRuntime({
       }
       tracker.select(x, y);
     },
-    [tracker],
+    [tracker, hold],
   );
 
   /** The system took a gesture away: nothing was aimed at or drawn. */
   const cancelAimGesture = useCallback(() => {
+    hold.cancel();
     tracker.clear();
     areaOriginRef.current = null;
     setAreaDraft(null);
-  }, [tracker]);
+  }, [tracker, hold]);
 
   /** Everything aim-related, back to zero — every mode, every stage. */
   const clearAim = useCallback(() => {
+    hold.cancel();
     tracker.clear();
     areaOriginRef.current = null;
     setAreaDraft(null);
     setAreaSel(null);
-  }, [tracker]);
+  }, [tracker, hold]);
 
   const toggleAimMode = useCallback(() => {
     clearAim();
@@ -1234,9 +1254,11 @@ function AnnoKitRuntime({
         hit: primaryHit ?? null,
         extraHits: extraHits.length > 0 ? extraHits : undefined,
         areaRect: areaSel.rect,
+        shape: "area",
       };
     } else if (selection?.final) {
-      plan = { x: selection.x, y: selection.y, hit: selection.hit };
+      // A pinned spot is about the POINT; the element under it rides as context.
+      plan = { x: selection.x, y: selection.y, hit: selection.hit, ...(selection.pinned ? { shape: "point" as const } : {}) };
     }
     if (!plan) return;
     const planned = plan;
@@ -1543,6 +1565,7 @@ function AnnoKitRuntime({
         >
           <AnnoKitCaptureRoot
             armed={armed && live}
+            onAimStart={onAimStart}
             onAim={onAim}
             onSelect={onSelect}
             onAimCancel={cancelAimGesture}
@@ -1593,6 +1616,8 @@ function AnnoKitRuntime({
                   topMargin={capture ? aimBounds.topMargin : undefined}
                 />
               )}
+              {/* A held spot: the ring marks the point; any element outline above stays as context. */}
+              {selection?.final && selection.pinned && <AnnoKitPinDot x={selection.x} y={selection.y} />}
               {/*
                 Markers are tappable only while IDLE: armed, they go inert so the
                 aim gesture reaches the capture root instead of a marker sitting

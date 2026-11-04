@@ -22,6 +22,11 @@ import type { GestureResponderEvent } from "react-native";
 
 interface Props {
   armed: boolean;
+  /**
+   * Finger DOWN, before the first `onAim`: the one event a hold detector
+   * needs that the survey callback cannot tell apart from a move.
+   */
+  onAimStart?: (x: number, y: number, rootRef: unknown) => void;
   /** Finger down or dragging: survey the element at this point. */
   onAim: (x: number, y: number, rootRef: unknown) => void;
   /** Finger lifted: select the element at this point. */
@@ -33,7 +38,7 @@ interface Props {
   children: React.ReactNode;
 }
 
-export function AnnoKitCaptureRoot({ armed, onAim, onSelect, onAimCancel, rootRef: outerRef, children }: Props) {
+export function AnnoKitCaptureRoot({ armed, onAimStart, onAim, onSelect, onAimCancel, rootRef: outerRef, children }: Props) {
   const ownRef = useRef<View | null>(null);
   const rootRef = outerRef ?? ownRef;
   // The responder events carry no `armed` guarantee of their own: a gesture
@@ -45,6 +50,7 @@ export function AnnoKitCaptureRoot({ armed, onAim, onSelect, onAimCancel, rootRe
     if (!armed) return false;
     gesturing.current = true;
     const { pageX, pageY } = e.nativeEvent;
+    onAimStart?.(pageX, pageY, rootRef.current);
     onAim(pageX, pageY, rootRef.current);
     // Claim the touch so the underlying control does not also activate.
     return true;

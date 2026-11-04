@@ -369,6 +369,37 @@ describe("buildAnnotationBody — area capture", () => {
   it("a tap that found nothing still says 'Screen', not 'Area'", () => {
     const body = wire(buildAnnotationBody({ ...CAPTURE, hit: null }, "hi", "ar3"));
     expect(body.element).toBe("Screen");
+    expect("shape" in body).toBe(false);
+  });
+
+  it("says its shape on the wire: area carries it, an element capture has no shape key at all", () => {
+    expect(wire(buildAnnotationBody({ ...CAPTURE, areaRect: RECT }, "x", "sh1")).shape).toBe("area");
+    expect("shape" in wire(buildAnnotationBody(CAPTURE, "x", "sh2"))).toBe(false);
+  });
+});
+
+describe("buildAnnotationBody — a pinned spot", () => {
+  const RECT = { x: 40, y: 300, width: 240, height: 160 };
+  it("is about the point: zero-size box at the finger, the element kept as context", () => {
+    const body = wire(buildAnnotationBody({ ...CAPTURE, shape: "point" }, "something goes here", "pt1"));
+    expect(body.shape).toBe("point");
+    expect(body.boundingBox).toEqual({ x: 120, y: 340, width: 0, height: 0 });
+    expect(body.element).toBe("PrimaryButton");
+    expect(body.source).toEqual({ file: "app/src/Card.tsx", line: 4 });
+    expect(body.testID).toBe("card-cta");
+  });
+
+  it("over nothing nameable it is a spot on the screen", () => {
+    const body = wire(buildAnnotationBody({ ...CAPTURE, hit: null, shape: "point" }, "here", "pt2"));
+    expect(body.element).toBe("Screen");
+    expect(body.shape).toBe("point");
+  });
+
+  it("keeps the shape at every Output Detail level", () => {
+    const body = buildAnnotationBody({ ...CAPTURE, shape: "point" }, "x", "pt3");
+    for (const detail of ["minimal", "standard", "full"] as const) {
+      expect(applyOutputDetail(body, detail).shape).toBe("point");
+    }
   });
 
   it("sampled extras ride as elements[], multi-style", () => {

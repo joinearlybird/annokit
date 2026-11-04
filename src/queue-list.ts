@@ -29,6 +29,7 @@
 
 import type { Comment } from "./comments";
 import { destinationBadge } from "./destination";
+import { shapeSubject } from "./shape";
 import type { DestinationPalette } from "./destination";
 import { splitTaskBody, taskOriginLine, taskReopenLabel } from "./message-task";
 import type { SubmitDestination } from "./destination";
@@ -86,8 +87,8 @@ function commentText(c: Comment): string {
   return first ? first.content.trim() : NO_TEXT;
 }
 
-function meta(element?: string, routeName?: string): string {
-  return [element, routeName].filter(Boolean).join(" · ");
+function meta(shape: string | undefined, element?: string, routeName?: string): string {
+  return [shapeSubject(shape, element), routeName].filter(Boolean).join(" · ");
 }
 
 /**
@@ -142,7 +143,7 @@ export function buildTaskRows(
       id: a.id,
       kind: "agent",
       text: annotationText(a),
-      meta: meta(a.element, a.routeName),
+      meta: meta(a.shape, a.element, a.routeName),
       badgeLabel: badge.label,
       badgeColor: badge.color,
       // Only a reopened task carries a word here. A task waiting to be sent
@@ -173,7 +174,7 @@ export function buildNoteRows(
       id: c.id,
       kind: "comment",
       text: commentText(c),
-      meta: meta(c.element, c.routeName),
+      meta: meta(c.shape, c.element, c.routeName),
       badgeLabel: badge.label,
       badgeColor: badge.color,
       status: teamNoteStatus(c.status),

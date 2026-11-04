@@ -16,6 +16,10 @@
  * (canSubmitTo, submitBlockedReason) live there too.
  */
 
+import { areaLabel } from "./area";
+import { captureShape, shapeSubject } from "./shape";
+import type { CaptureShape } from "./shape";
+
 /** Just enough of a PendingCapture to name it. */
 export interface IdentityCapture {
   hit?: {
@@ -24,6 +28,9 @@ export interface IdentityCapture {
     source?: { file: string; line: number } | null;
   } | null;
   routeName?: string | null;
+  shape?: CaptureShape;
+  areaRect?: { x: number; y: number; width: number; height: number };
+  sketch?: { strokes: unknown[] } | null;
 }
 
 /** The last path segment: "app/src/components/Card.tsx" → "Card.tsx". */
@@ -47,7 +54,13 @@ export function fileBasename(file: string): string {
  */
 export function captureIdentityLine(capture: IdentityCapture): string {
   const hit = capture.hit ?? null;
-  const name = hit?.element?.trim() || "Screen";
+  const shape = captureShape({ x: 0, y: 0, ...capture });
+  // The subject names the shape and the element together ("This spot on
+  // FeedRow", "Sketch over Card"); an area over nothing says its size, since
+  // the size is the one thing a region has for a name.
+  const name = shape === "area" && !hit?.element?.trim() && capture.areaRect
+    ? areaLabel(capture.areaRect)
+    : shapeSubject(shape, hit?.element?.trim() || "Screen");
   const where = hit?.source
     ? `${fileBasename(hit.source.file)}:${hit.source.line}`
     : hit?.testID

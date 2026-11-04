@@ -418,6 +418,7 @@ function agentPrompt(a) {
     "",
     "WHAT THEY TOUCHED:",
     `  component: ${a.element ?? "unknown"}`,
+    ...shapeLines(a),
   ];
   if (a.source?.file) lines.push(`  defined at: ${a.source.file}:${a.source.line ?? "?"}`);
   if (a.nearbyText) {
@@ -494,6 +495,24 @@ function followUpPrompt(a) {
     "",
     ...FINISH,
   ].join("\n");
+}
+
+/**
+ * What the capture was ABOUT, when it was not simply the element: a held
+ * spot (the point matters, the component is context), or a region (the
+ * rectangle matters, the components inside it are what it contains).
+ */
+function shapeLines(a) {
+  const b = a.boundingBox ?? {};
+  if (a.shape === "point") {
+    const on = a.element && a.element !== "Screen" ? ` on ${a.element}` : " on the screen";
+    return [`  an exact spot at (${num(a.x)}, ${num(a.y)})${on} — the point is what they mean, not the whole component`];
+  }
+  if (a.shape === "area") {
+    const inside = a.element && a.element !== "Area" ? ` containing ${a.element}` : ", with no component inside it";
+    return [`  a region ${num(b.width)}×${num(b.height)} at (${num(b.x)}, ${num(b.y)})${inside}`];
+  }
+  return [];
 }
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v) : "?");
@@ -1018,6 +1037,9 @@ function boundCapture(body) {
     if (device) capture.device = device;
     else delete capture.device;
   }
+  // The capture's shape (docs/protocol.md, "Shapes"): one of the names the
+  // protocol gives, or nothing — an element capture sends none.
+  if (capture.shape !== undefined && !["element", "point", "area", "sketch"].includes(capture.shape)) delete capture.shape;
   return capture;
 }
 
