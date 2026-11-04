@@ -73,6 +73,8 @@ export interface MarkerSource {
   routeName?: string;
   /** Comment lifecycle (`open` | `resolved` | `converted`); annotations have none. */
   status?: string;
+  /** The agent asked and is waiting (src/ask.ts); the marker wears a "?". */
+  awaitingReply?: boolean;
   /**
    * Set when this annotation was made FROM a team note's message. Such an
    * annotation is represented by that note's marker (which gains a blue
@@ -92,6 +94,13 @@ export interface MarkerPlacement {
   kind: MarkerKind;
   /** Comment status, carried through so the appearance can de-emphasize it. */
   status?: string;
+  /** Waiting on the user's answer, carried through for the badge and the label. */
+  awaitingReply?: boolean;
+}
+
+/** The small glyph on a marker's corner: "?" while the agent waits for an answer on this task, null otherwise. */
+export function markerBadge(marker: { kind: MarkerKind; awaitingReply?: boolean }): string | null {
+  return marker.kind === "annotation" && marker.awaitingReply === true ? "?" : null;
 }
 
 /**
@@ -130,7 +139,10 @@ export function visibleMarkers(
     if (!a || typeof a.x !== "number" || typeof a.y !== "number") continue;
     if (routeName && a.routeName && a.routeName !== routeName) continue;
     if (typeof a.sourceCommentId === "string" && a.sourceCommentId) continue;
-    out.push({ id: a.id, x: a.x, y: a.y, number: out.length + 1, kind, status: a.status });
+    out.push({
+      id: a.id, x: a.x, y: a.y, number: out.length + 1, kind, status: a.status,
+      ...(a.awaitingReply === true ? { awaitingReply: true } : {}),
+    });
   }
   return out;
 }

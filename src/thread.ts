@@ -35,6 +35,11 @@ export interface ThreadMessage {
   role: "user" | "agent";
   /** ISO-8601, server-stamped. Absent on an optimistic local message. */
   timestamp?: string;
+  /**
+   * "question" on an agent message that asks the user something and waits
+   * (src/ask.ts; docs/protocol.md "Questions"). Server-written, additive.
+   */
+  kind?: "question";
 }
 
 /** The `setThread` shape React's `useState` gives us. */

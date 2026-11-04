@@ -55,6 +55,7 @@ import { AnnoKitThreadView } from "./thread-view";
 import { formatChatTime } from "./chat";
 import { onAnnoKitEvent } from "./events";
 import { doneRow, doneTasks } from "./runs";
+import { isAwaitingReply } from "./ask";
 import { sessionPath } from "./url";
 import { postAccepted, type AnnoKitTransport } from "./transport";
 import type { ServerAnnotation } from "./types";
@@ -251,7 +252,11 @@ export function AnnoKitQueue({
                       accessibilityRole="button"
                       accessibilityLabel={`Open finished task: ${row.text}.${row.request ? ` Asked: ${row.request}.` : ""} ${row.who ? `${row.who}, ` : ""}${row.how}`}
                     >
-                      <View style={[styles.doneDot, { backgroundColor: toneColor }]} />
+                      {isAwaitingReply(task) ? (
+                        <Text style={[styles.doneAsk, { color: p.agentText }]} testID={`annokit-done-asking-${i}`}>?</Text>
+                      ) : (
+                        <View style={[styles.doneDot, { backgroundColor: toneColor }]} />
+                      )}
                       <View style={styles.itemBody}>
                         <Text style={[styles.itemText, !!row.request && styles.doneTitle]} numberOfLines={2}>
                           {row.text}
@@ -493,6 +498,14 @@ const useStyles = themedStyles((p) => ({
   },
   tabTextActive: {
     color: p.textStrong,
+  },
+  /** The agent asked: a "?" where the outcome dot would be. */
+  doneAsk: {
+    width: 10,
+    textAlign: "center",
+    fontSize: 13,
+    fontWeight: "800",
+    marginTop: 2,
   },
   doneDot: {
     width: 8,

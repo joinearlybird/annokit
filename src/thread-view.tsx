@@ -56,6 +56,7 @@ import {
   taskReopenLabel,
 } from "./message-task";
 import { detailSendLabel } from "./queue-list";
+import { ANSWER_PLACEHOLDER, answerAction, pendingQuestion } from "./ask";
 import { taskProgress } from "./agent-activity";
 import { readRuns, runLines, taskUndoAction } from "./runs";
 import { serverSupportsUndo } from "./handshake";
@@ -298,6 +299,23 @@ export function AnnoKitThreadView({
     void read(false);
   };
 
+  /** Post the answer, then send the task on — the same agent session continues (src/ask.ts). */
+  const doAnswer = async () => {
+    const content = reply.trim();
+    if (!content || sending || handingOver) return;
+    setSending(true);
+    setReply("");
+    reason.current = "own";
+    const ok = await postThreadReply(transport, annotationId, content, setMessages);
+    setSending(false);
+    if (!ok) {
+      setReply(content);
+      return;
+    }
+    await read(false);
+    if (answer.continues) await handOver();
+  };
+
   const handOver = async () => {
     if (handingOver) return;
     setHandingOver(true);
@@ -352,6 +370,10 @@ export function AnnoKitThreadView({
   });
   const unseenLabel = newReplyLabel(unseen);
   const undoAction = taskUndoAction(annotation, serverSupportsUndo());
+  // The agent stopped to ask (src/ask.ts): the question is quoted above the
+  // box, and one tap posts the answer and sends the task on.
+  const question = pendingQuestion(annotation);
+  const answer = answerAction({ text: reply, sending: sending || handingOver, agentBusy });
 
   return (
     <AnnoKitDetailShell
@@ -393,12 +415,18 @@ export function AnnoKitThreadView({
               <Text style={styles.unseenText}>{unseenLabel}</Text>
             </Pressable>
           )}
+          {question && (
+            <View style={styles.askCard} testID="annokit-thread-question">
+              <Text style={styles.askLead}>The agent asks</Text>
+              <Text style={styles.askText}>{question.content}</Text>
+            </View>
+          )}
           <View style={styles.replyRow}>
             <TextInput
               testID="annokit-thread-input"
               maxLength={TEXT_MAX}
               style={styles.input}
-              placeholder="Add detail…"
+              placeholder={question ? ANSWER_PLACEHOLDER : "Add detail…"}
               placeholderTextColor={p.textMuted}
               multiline
               value={reply}
@@ -446,7 +474,19 @@ export function AnnoKitThreadView({
             "With the agent", disabled — true, and nothing to do. Undo takes
             the change back; once undone, Redo puts it back in the queue.
           */}
-          {undoAction ? (
+          {question ? (
+            <Pressable
+              onPress={doAnswer}
+              disabled={!answer.enabled}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !answer.enabled, busy: sending || handingOver }}
+              accessibilityLabel={answer.continues ? "Answer the agent and send the task on" : "Answer the agent; the task is sent when the agent is free"}
+              style={[styles.handOverBtn, !answer.enabled && styles.disabled]}
+              testID="annokit-thread-answer"
+            >
+              <Text style={styles.handOverText}>{answer.label}</Text>
+            </Pressable>
+          ) : undoAction ? (
             <Pressable
               onPress={() => undoAction.kind !== "undoing" && toggleUndo(undoAction.kind)}
               disabled={!undoAction.enabled || toggling}
@@ -905,6 +945,28 @@ const useStyles = themedStyles((p) => ({
     flexShrink: 1,
     color: p.agentText,
     fontSize: 12,
+  },
+  /** The agent's question, quoted above the box it is answered in. */
+  askCard: {
+    marginHorizontal: 20,
+    marginBottom: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: p.agentTintMid,
+    gap: 2,
+  },
+  askLead: {
+    color: p.agentSoft,
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  askText: {
+    color: p.textStrong,
+    fontSize: 14,
+    lineHeight: 19,
   },
   handOverBtn: {
     marginHorizontal: 20,

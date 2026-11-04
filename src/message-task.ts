@@ -514,8 +514,10 @@ export function taskReopenLabel(
  * is true and useless.
  */
 export function taskLifecycleLabel(
-  a: { status?: string; reopenedAt?: string; reopenCount?: number; redoRequestedAt?: string } | null | undefined,
+  a: { status?: string; awaitingReply?: boolean; reopenedAt?: string; reopenCount?: number; redoRequestedAt?: string } | null | undefined,
 ): string {
+  // The agent stopped to ask (src/ask.ts): nothing moves until the answer.
+  if (a?.awaitingReply === true) return "Needs your answer";
   const reopened = taskReopenLabel(a);
   if (reopened && (!a?.status || a.status === "pending")) {
     return `${reopened} — waiting to be sent`;

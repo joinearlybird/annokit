@@ -19,6 +19,7 @@
  */
 
 import { splitTaskBody } from "./message-task";
+import { NEEDS_ANSWER, isAwaitingReply } from "./ask";
 import type { ServerAnnotation } from "./types";
 
 export type RunOutcome = "running" | "done" | "failed" | "stopped";
@@ -191,11 +192,17 @@ export function doneRow(a: ServerAnnotation): DoneRow {
   const runs = readRuns(a.runs);
   const last = runs[runs.length - 1];
   const at = last?.finishedAt ?? last?.startedAt ?? a.updatedAt ?? a.createdAt;
+  // The agent asked something and is waiting: that is what the row says,
+  // whatever its last run was, until the user answers (src/ask.ts).
+  const asking = isAwaitingReply(a);
   if (!last) {
     const status = a.status ? a.status.charAt(0).toUpperCase() + a.status.slice(1) : "Done";
-    return { id: a.id, text, how: status, tone: "muted", ...(at ? { at } : {}) };
+    return { id: a.id, text, how: asking ? NEEDS_ANSWER : status, tone: asking ? "busy" : "muted", ...(at ? { at } : {}) };
   }
-  const { who, how, tone } = runLines(last);
+  const lines = runLines(last);
+  const { who } = lines;
+  const how = asking ? NEEDS_ANSWER : lines.how;
+  const tone = asking ? "busy" : lines.tone;
   // The newest title any run gave: a failed re-run says nothing new about
   // what the task became, and an undo names no change of its own.
   const title = [...runs].reverse().find((r) => r.title && r.kind !== "undo")?.title;
@@ -240,6 +247,8 @@ export type UndoAction =
 
 export function taskUndoAction(a: ServerAnnotation, supported: boolean): UndoAction | null {
   if (!supported) return null;
+  // A run that stopped to ask took nothing back yet: answer first.
+  if (isAwaitingReply(a)) return null;
   if (a.undoRequested === true) return { kind: "undoing", label: "Undoing…", enabled: false };
   if (!isFinishedTask(a)) return null;
   if (typeof a.undoneAt === "string" && a.undoneAt) {

@@ -416,6 +416,14 @@ describe("making the task", () => {
   });
 });
 
+describe("a task the agent is asking about", () => {
+  it("reads Needs your answer whatever else is true of it", () => {
+    expect(taskLifecycleLabel({ status: "sent", awaitingReply: true })).toBe("Needs your answer");
+    expect(taskLifecycleLabel({ status: "pending", awaitingReply: true })).toBe("Needs your answer");
+    expect(taskLifecycleLabel({ status: "sent" })).toBe("With the agent");
+  });
+});
+
 describe("the mark on a bubble", () => {
   const task = { id: "ann-1", sourceCommentId: "c1", sourceMessageIds: ["m2", "m3"] };
 

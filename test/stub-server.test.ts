@@ -541,6 +541,16 @@ describe("bad input", () => {
     expect((await fetchComment(transport, note!.id))?.shape).toBe("area");
   });
 
+  it("ignores a client that claims the agent is waiting on it", async () => {
+    await createAnnotation("a-claims-wait");
+    const res = await transport.postJsonAt(`/sessions/${SESSION}/annotations`, {
+      id: "a-claims-wait-2", comment: "x", kind: "feedback", platform: "native", element: "Card", componentStack: [], x: 1, y: 2,
+      boundingBox: { x: 1, y: 2, width: 1, height: 1 }, scroll: { offsetY: 0 }, awaitingReply: true,
+    });
+    expect(res.status).toBe(201);
+    expect((await fetchAnnotation(transport, "a-claims-wait-2")).annotation).not.toHaveProperty("awaitingReply");
+  });
+
   it("keeps a sketch's strokes as sent, and drops a sketch it cannot read", async () => {
     const base = { comment: "x", kind: "feedback", platform: "native", element: "Card", componentStack: [], x: 1, y: 2, boundingBox: { x: 1, y: 2, width: 10, height: 10 }, scroll: { offsetY: 0 }, shape: "sketch" };
     const sketch = { strokes: [{ tool: "pen", points: [{ x: 1.5, y: 2 }, { x: 30, y: 40 }] }, { tool: "arrow", points: [{ x: 0, y: 0 }, { x: 9, y: 9 }] }] };
@@ -596,6 +606,8 @@ describe("progress while the agent works", () => {
         `case "$*" in *--resume*) [ -f "${join(bin, "fail-resume")}" ] && { echo "No conversation found" >&2; exit 1; };; esac`,
         `echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/x/app/Button.tsx"}}]}}'`,
         "sleep 1",
+        // An ambiguous request: the agent stops to ask (a Question: last line) instead of a Title.
+        `if grep -q ambiguous "${join(bin, "prompt.txt")}"; then printf '%s\\n' '{"type":"result","result":"Two buttons match.\\nQuestion: Which of the two buttons do you mean?"}'; exit 0; fi`,
         // printf, not echo: sh's echo would turn the JSON's \n into a line break.
         `printf '%s\\n' '{"type":"result","result":"Made it blue.\\nTitle: Blue button"}'`,
       ].join("\n"),
@@ -684,6 +696,57 @@ describe("progress while the agent works", () => {
     // No choice on the task: the agent's own model and effort.
     expect(readFileSync(join(bin, "args.txt"), "utf8")).not.toMatch(/--model|--effort/);
   }, 15_000);
+
+  it("lets the agent stop and ask: the task waits for the answer, then continues its session", async () => {
+    type Task = {
+      status: string; awaitingReply?: boolean; reopenCount?: number;
+      thread?: { role: string; content: string; kind?: string }[];
+      runs?: { outcome: string; resumed?: boolean; summary?: string; asked?: boolean }[];
+    };
+    const task = async () => (await (await fetch(`${base}/annotations/pask`)).json()) as Task;
+    const settle = async (runCount: number) => {
+      let t = await task();
+      for (let i = 0; i < 80 && ((t.runs?.length ?? 0) < runCount || t.status === "working"); i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        t = await task();
+      }
+      return t;
+    };
+    await post("/sessions/ps/annotations", { id: "pask", comment: "ambiguous: make one of these two buttons bigger", element: "Button", x: 1, y: 1 });
+    await post("/annotations/send", { annotationIds: ["pask"] });
+    const asked = await settle(1);
+    expect(asked.status).toBe("sent");
+    expect(asked.awaitingReply).toBe(true);
+    const last = asked.thread![asked.thread!.length - 1]!;
+    expect(last).toMatchObject({ role: "agent", kind: "question" });
+    expect(last.content).toContain("Which of the two buttons do you mean?");
+    expect(last.content).not.toMatch(/Question:/);
+    expect(asked.runs?.[0]).toMatchObject({ outcome: "done", asked: true, summary: "Which of the two buttons do you mean?" });
+    // Not sendable work: out of /pending, found in the session read.
+    const pendingIds = ((await (await fetch(`${base}/sessions/ps/pending`)).json()) as { id: string }[]).map((a) => a.id);
+    expect(pendingIds).not.toContain("pask");
+    const session = (await (await fetch(`${base}/sessions/ps`)).json()) as { annotations: { id: string; awaitingReply?: boolean }[] };
+    expect(session.annotations.find((a) => a.id === "pask")?.awaitingReply).toBe(true);
+    expect((await post("/annotations/pask/undo", {})).status).toBe(409);
+    const firstArgs = readFileSync(join(bin, "args.txt"), "utf8");
+    const sessionId = /--session-id (\S+)/.exec(firstArgs)?.[1];
+
+    // The answer clears the wait and reopens the task; sending continues the same session.
+    await post("/annotations/pask/thread", { content: "The left one" });
+    const answered = await task();
+    expect(answered).not.toHaveProperty("awaitingReply");
+    expect(answered.status).toBe("pending");
+    expect(answered.reopenCount).toBe(1);
+    await post("/annotations/send", { annotationIds: ["pask"] });
+    const second = await settle(2);
+    expect(second.status).toBe("sent");
+    expect(second).not.toHaveProperty("awaitingReply");
+    expect(second.runs?.[1]).toMatchObject({ outcome: "done", resumed: true });
+    expect(readFileSync(join(bin, "args.txt"), "utf8")).toContain(`--resume ${sessionId}`);
+    const prompt = readFileSync(join(bin, "prompt.txt"), "utf8");
+    expect(prompt).toContain("They answered your question:");
+    expect(prompt).toContain("The left one");
+  }, 30_000);
 
   it("runs a task on the model and effort it asked for", async () => {
     await post("/sessions/ps/annotations", {

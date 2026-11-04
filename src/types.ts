@@ -117,6 +117,12 @@ export interface ServerAnnotation {
   scroll?: { scrollViewTag?: number; offsetY?: number; offsetX?: number } | null;
   status?: string;
   /**
+   * The agent asked something and is waiting for the user's reply
+   * (src/ask.ts). Server-written and additive: the task has left `working`
+   * like any finished task, and the next human reply clears this.
+   */
+  awaitingReply?: boolean;
+  /**
    * What the agent is doing right now, in one short line ("Editing
    * app/Button.tsx"), while `status` is `working`. Optional and additive
    * (docs/protocol.md, *Annotations*): the overlay shows it under the

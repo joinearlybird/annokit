@@ -97,6 +97,8 @@ import {
 } from "./screenshot";
 import { readDevice } from "./device";
 import { AnnoKitBurnIn } from "./burn-in";
+import { askActivity, askingTasks } from "./ask";
+import { AnnoKitAskBanner } from "./ask-banner";
 import { nextMarkerNumber } from "./marker-hit";
 import { markerPositionTrusted } from "./anchor-registry";
 import { createHoldDetector } from "./hold";
@@ -531,6 +533,12 @@ function AnnoKitRuntime({
   // note's Tasks tab, its marker pip and "open the task" read once the task
   // has left the queue (mergeTaskLists, src/message-task.ts).
   const [linkedTasks, setLinkedTasks] = useState<ServerAnnotation[]>([]);
+  // Session tasks the agent stopped on to ask something (src/ask.ts). They
+  // have left `/pending`, so they are read from the session like the
+  // note-made tasks, and feed the markers, the banner and "open the task".
+  const [asking, setAsking] = useState<ServerAnnotation[]>([]);
+  // Questions the user put the banner away for; the task still says it needs an answer.
+  const [dismissedAsks, setDismissedAsks] = useState<ReadonlySet<string>>(() => new Set());
   // Derived, not stored: the server is the only thing that knows whether an
   // agent is working, and `pending` is already re-read on every event.
   const agentWork = agentActivity(pending);
@@ -540,7 +548,11 @@ function AnnoKitRuntime({
   // on the events that can change it (never on the backstop timer — it is
   // the more expensive read and nobody is looking at it most of the time).
   const [allComments, setAllComments] = useState<Comment[]>([]);
-  const knownTasks = useMemo(() => mergeTaskLists(pending, linkedTasks), [pending, linkedTasks]);
+  const knownTasks = useMemo(() => mergeTaskLists(mergeTaskLists(pending, linkedTasks), asking), [pending, linkedTasks, asking]);
+  // What draws a marker: the queue, plus the tasks waiting on an answer,
+  // which have left the queue but not the screen.
+  const markerTasks = useMemo(() => mergeTaskLists(pending, asking), [pending, asking]);
+  const asks = askActivity(asking.filter((t) => !dismissedAsks.has(t.id)));
   // Optimistic: a server that has the routes proves it on the first read; a
   // server that 404s turns this off and the overlay says so (and stops
   // polling) without touching annotations, aiming or the toolbar.
@@ -791,16 +803,17 @@ function AnnoKitRuntime({
       setPending(list.filter((a) => a && typeof a.id === "string"));
     })();
     // The same moments that can move a task out of the queue can move one
-    // that came from a note, so the linked list is re-read alongside —
-    // only when there are notes to show it on, and only from an Annotate
-    // Protocol server (`GET /sessions/:sid` is its route).
-    if (!hasNotesRef.current || serverFlavor() === "agentation") return;
+    // that came from a note, or leave one waiting on an answer, so the
+    // session is re-read alongside — from an Annotate Protocol server
+    // (`GET /sessions/:sid` is its route; agentation has none).
+    if (serverFlavor() === "agentation") return;
     void (async () => {
       const ticket = linkedSeq.current.begin();
       const session = await transport.getJson<{ annotations?: ServerAnnotation[] }>(sessionPath(sessionId));
       if (!session || !linkedSeq.current.accept(ticket)) return;
-      const all = Array.isArray(session.annotations) ? session.annotations : [];
-      setLinkedTasks(all.filter((a) => a && typeof a.id === "string" && typeof a.sourceCommentId === "string" && a.sourceCommentId));
+      const all = (Array.isArray(session.annotations) ? session.annotations : []).filter((a) => a && typeof a.id === "string");
+      setLinkedTasks(all.filter((a) => typeof a.sourceCommentId === "string" && a.sourceCommentId));
+      setAsking(askingTasks(all));
     })();
   }, [transport, sessionId]);
 
@@ -1761,7 +1774,7 @@ function AnnoKitRuntime({
                 its own marks would be the same lie as a detached highlight.
               */}
               <AnnoKitMarkers
-                annotations={pending}
+                annotations={markerTasks}
                 comments={comments}
                 routeName={routeName}
                 armed={armed}
@@ -1841,6 +1854,17 @@ function AnnoKitRuntime({
                 onPress={() =>
                   agentWork.taskId ? (onOpenTask ?? showTask)(agentWork.taskId) : setQueueOpen(true)
                 }
+              />
+            )}
+            {/*
+              The agent asked something and is waiting (src/ask.ts). The
+              working banner wins when both apply; this one can be put away.
+            */}
+            {prefs.agentBanner && asks.count > 0 && agentWork.count === 0 && !armed && !capture && !shooting && (
+              <AnnoKitAskBanner
+                activity={asks}
+                onPress={() => (asks.taskId ? (onOpenTask ?? showTask)(asks.taskId) : setQueueOpen(true))}
+                onDismiss={() => setDismissedAsks((prev) => new Set([...prev, ...asking.map((t) => t.id)]))}
               />
             )}
             <AnnoKitFab

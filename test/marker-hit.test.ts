@@ -28,6 +28,7 @@ import {
   markersInteractive,
   pickMarkerAt,
   resolveOpenMarker,
+  markerBadge,
   visibleMarkers,
 } from "../src/marker-hit";
 import type { MarkerPlacement } from "../src/marker-hit";
@@ -93,6 +94,17 @@ describe("visible markers", () => {
     const list = [{ id: "a", x: 1, y: 1 }, { id: "b", x: 2, y: 2, routeName: "/settings" }];
     expect(visibleMarkers(list, null)).toHaveLength(2);
     expect(visibleMarkers(list, "/feed").map((m) => m.id)).toEqual(["a"]);
+  });
+});
+
+describe("a marker the agent is asking about", () => {
+  it("wears a ? while the agent waits for an answer; other tasks and notes wear none", () => {
+    const out = visibleMarkers([{ id: "w", x: 1, y: 1, awaitingReply: true }, { id: "n", x: 2, y: 2, awaitingReply: false }], null);
+    expect(out[0]?.awaitingReply).toBe(true);
+    expect(out[1]).not.toHaveProperty("awaitingReply");
+    expect(markerBadge(out[0]!)).toBe("?");
+    expect(markerBadge(out[1]!)).toBeNull();
+    expect(markerBadge({ kind: "comment", awaitingReply: true })).toBeNull();
   });
 });
 

@@ -182,6 +182,26 @@ Team notes carry the same field (see *Comments*), so a task made from a
 note keeps the note's shape. `shape` is never trimmed by Output Detail: it
 is what makes the box readable.
 
+**The agent asks you.** A headless run cannot stop and wait, so the
+convention is in the prompt a server builds: *if you need to ask the
+developer something before changing anything, make no edits and end with
+a last line `Question: <one sentence>`.* A server that runs agents SHOULD
+read that line the way it reads `Title:` (only the last non-blank line
+counts), store the reply as an agent message with `kind: "question"`, set
+`awaitingReply: true` on the task, and record the question as the run's
+`summary`. **No new status value**: the task leaves `working` as usual
+and is finished for every consumer that filters on `pending`; it is NOT in
+`GET /sessions/:sid/pending` (a sendable row with no answer would re-run
+the agent with nothing new), so the overlay finds it in
+`GET /sessions/:sid`. A human reply clears `awaitingReply` and reopens
+the task by the rule under *Reopening a task*; the overlay's **Answer and
+continue** posts the reply and then `POST /annotations/send` for that
+task in one tap, so a server that keeps sessions continues the same one.
+A reply during the run that asked reopens the task when the run ends, as
+for any run. `/undo` on a task awaiting a reply SHOULD answer 409. An
+agent that never uses the convention simply replies, and nothing here
+applies. All of it is optional and additive; `protocolVersion` stays 1.
+
 **`scroll`** — window coordinates carry no document scroll on native, so
 `x`/`y`/`boundingBox` alone are ambiguous on a scrolled screen; this is what
 lets a consumer reconcile them.
@@ -254,6 +274,14 @@ characters. It is ignored on a task that is not `working`, so a stale line
 can never outlive the run, but a server should still clear it when the run
 ends.
 
+**`awaitingReply` — optional, additive.** `true` while the agent has stopped
+to ask the user something and is waiting for the answer (see *Questions*).
+Server-written: a client that sends it is ignored. The task is finished as
+far as `status` is concerned (it has left `working` the usual way); the
+overlay reads this flag to say **Needs your answer** on the task, put a "?"
+on its marker, raise a banner, and turn the reply box into an answer that
+sends the task on. The next human reply clears it.
+
 ### The task lifecycle a server owes the client
 
 Three client behaviours read `status`, so a server that runs agents has
@@ -265,6 +293,7 @@ protocol enforces — they are what the overlay believes.
 | `pending` | In the queue, sendable. `GET /sessions/:sid/pending` returns it |
 | `working` | Banner at the top naming the task (tap to open it), with `progress` under it; its marker and the pencil button pulse; marked **Working…** in the queue, with no checkbox and not counted by Send; Send refused for other tasks while **One task at a time** is on (see below); detail pane reads "With the agent" and shows `progress`. Still returned by `/pending` — it is not finished |
 | anything else | Detail pane reads "With the agent" and will not send it again |
+| anything else, with `awaitingReply: true` | Done list says **Needs your answer**, a banner says the agent has a question, the marker stays on screen with a "?", and the detail quotes the question with an **Answer and continue** button that posts the reply and then `POST /annotations/send` for the task |
 
 **Clear `working` on EVERY exit path.** Success, failure, timeout, an agent
 that crashed, and the server's own restart. This is the one obligation that
@@ -322,7 +351,7 @@ to the record instead of replacing it:
     "finishedAt": "2026-10-28T10:01:40.000Z", // absent while it runs
     "outcome": "done",                        // running | done | failed | stopped
     "files": [{ "path": "app/Button.tsx", "added": 3, "removed": 1 }],
-    "summary": "Made the button darker.",     // the agent's own one line
+    "summary": "Made the button darker.",     // the agent's own one line (the question, when the run stopped to ask)
     "title": "Darker primary button",         // a few words naming the change
     "resumed": true,                          // continued the agent's session from the run before
     "kind": "undo",                           // took the task's change back (Undoing a task); absent: an ordinary run
@@ -540,8 +569,10 @@ copy of the reply until the next read.
 
 **`role` is server-assigned** — a client reply is always recorded as
 `"user"` — as are `id` and `timestamp`. A stored message is
-`{id, content, role: "user"|"agent", timestamp}`; the route answers with the
-whole updated annotation. The client appends the reply optimistically and
+`{id, content, role: "user"|"agent", timestamp, kind?}`, where `kind:
+"question"` (optional, additive, server-written) marks an agent message
+that asks the user something and waits (see *Questions*); the route answers
+with the whole updated annotation. The client appends the reply optimistically and
 removes it again (restoring the text to the input) if the server does not
 take it. Messages are rendered with user and agent visually distinguished.
 
