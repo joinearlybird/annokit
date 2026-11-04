@@ -73,6 +73,13 @@ interface Props {
    * behind every sheet, and can be switched off.
    */
   working?: boolean;
+  /**
+   * Invisible while a screenshot is taken (src/index.tsx, `shooting`), by
+   * opacity rather than unmounting: the drag position, the pan responder
+   * and the working pulse all live on, and the shot does not show a button
+   * the app does not have.
+   */
+  hidden?: boolean;
   /** Arm the capture gesture — or, when already armed, disarm. */
   onToggleArm: () => void;
   onOpenQueue: () => void;
@@ -85,6 +92,7 @@ export function AnnoKitFab({
   pendingCount,
   noteCount,
   working = false,
+  hidden = false,
   onToggleArm,
   onOpenQueue,
   onOpenNotes,
@@ -212,6 +220,7 @@ export function AnnoKitFab({
     <Animated.View
       style={[
         styles.wrapper,
+        hidden && { opacity: 0 },
         expanded
           ? { width: placement.width, height: TOOLBAR_HEIGHT }
           : { width: FAB_SIZE, height: FAB_SIZE },

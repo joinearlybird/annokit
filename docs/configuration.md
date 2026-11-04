@@ -72,10 +72,12 @@ are deliberately left open for that reason.
   (`router.navigate`). Without it markers are not filtered per screen and the
   notes list opens a note where you stand instead of travelling to it.
 - `react-native-view-shot` — optional; captures the screenshot the composer
-  offers behind its camera button. The require is guarded and `captureScreen`
-  and `releaseCapture` are checked independently, so a host without it (node
-  tests, SSR) degrades to screenshots-off rather than crashing at import, and
-  a device build without the native module simply never shows the control.
+  offers behind its camera button, at one pixel per point on native. The
+  require is guarded and `captureScreen` and `releaseCapture` are checked
+  independently, so a host without it (node tests, SSR) degrades to
+  screenshots-off rather than crashing at import, and a device build without
+  the native module simply never shows the control. On the web, view-shot 6
+  also needs its `html2canvas-pro` peer, and the capture is not resized.
   It was declared **required** until 2026-09-17, which the guarding had never
   matched.
 - `expo-sensors` — optional; enables shake-to-arm (a shake toggles annotate

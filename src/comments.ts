@@ -31,7 +31,7 @@
  * pending.ts already use). It is also the seam a realtime channel would
  * replace: the components only ever ask this module for a list.
  */
-import { seg } from "./url";
+import { marksQuery, seg } from "./url";
 
 import type { AnnotationReference } from "./attachments";
 import { OVERLAY_POLL_INTERVAL_MS, shouldPoll } from "./poll";
@@ -162,8 +162,8 @@ export function commentPath(commentId: string): string {
  * treats the upload exactly as it does for annotations, as an optional
  * follow-up to something already saved.
  */
-export function commentScreenshotPath(commentId: string): string {
-  return `${commentPath(commentId)}/screenshot`;
+export function commentScreenshotPath(commentId: string, marks?: string): string {
+  return `${commentPath(commentId)}/screenshot${marksQuery(marks)}`;
 }
 
 /** `POST /comments/:id/messages`. */

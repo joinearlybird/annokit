@@ -49,6 +49,17 @@ keyboard, if it is up — step out of the way for a beat while the screen
 underneath is captured, so what the agent sees is the app rather than our
 chrome on top of it. Never tap it and no capture is ever written to disk.
 
+**What the overlay adds to the picture.** For the beat the shutter is open
+the floating button, the aim outline and the agent banner are hidden, the
+app is put back where it was if the sheet had pushed it up, and the task
+you are composing gets its own mark: the element's outline (or the area's
+dashed rectangle, or a ring on a held spot) and a numbered badge in the
+same style as the markers already on screen, which stay in the shot too.
+On native the capture is taken at **one pixel per point**, so it is about a
+ninth of the size of a raw 3x capture and every coordinate in the task
+reads straight off it. The mark is drawn as views over the app before the
+shot is taken; the image's bytes are never touched.
+
 What you took appears as a chip beside your other attachments. Tap the chip
 to see the capture full size before you send it; tap its ✕ (or the camera
 again) to remove it, which **deletes the file** rather than keeping it
@@ -77,7 +88,7 @@ What the client does, and all it does:
 
 | | |
 |---|---|
-| **On the device (native)** | a PNG in the OS temp directory. The bytes never enter JS memory — the upload streams the file off disk — and the file is deleted on every exit: dismissal, either submit (after the upload lands), a failed capture, turning the camera off, provider teardown. A failed submit is the one case that keeps it, so a retry still has one. |
+| **On the device (native)** | a PNG in the OS temp directory, at one pixel per point. The bytes never enter JS memory — the upload streams the file off disk — and the file is deleted on every exit: dismissal, either submit (after the upload lands), a failed capture, turning the camera off, provider teardown. A failed submit is the one case that keeps it, so a retry still has one. |
 | **On the device (web)** | a `data:` URL held in memory until it becomes a Blob for the upload. Nothing touches disk, and the GC owns it. |
 | **In transit** | one `multipart/form-data` `file` part to `POST /annotations/:aid/screenshot` or `POST /comments/:id/screenshot`. |
 | **After that** | nothing. The client keeps no copy, no cache, no index, and never reads a screenshot back. |

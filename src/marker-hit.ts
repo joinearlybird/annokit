@@ -136,6 +136,21 @@ export function visibleMarkers(
 }
 
 /**
+ * The number the NEXT task on this screen will wear: one past the markers
+ * drawn now. Takes the same `trusted` filter the marker layer applies
+ * before numbering (src/markers.tsx, markerPositionTrusted), so the badge
+ * burned into a screenshot (src/burn-in.tsx) agrees with the dots beside
+ * it rather than with a list the user cannot see.
+ */
+export function nextMarkerNumber(
+  annotations: readonly MarkerSource[],
+  routeName: string | null,
+  trusted: (id: string) => boolean = () => true,
+): number {
+  return visibleMarkers(annotations.filter((a) => trusted(a.id)), routeName).length + 1;
+}
+
+/**
  * The one render/pick order for both kinds: comments first, annotations
  * last. `pickMarkerAt` keeps the LAST match of the strongest tier, so on an
  * exact overlap the annotation wins — and because react-native paints in
