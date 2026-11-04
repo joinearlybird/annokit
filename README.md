@@ -44,7 +44,7 @@ reference implementation.
 
 | | | | |
 |---|---|---|---|
-| <img src="https://raw.githubusercontent.com/joinearlybird/annokit/main/docs/media/toolbar.png" width="180" alt="The toolbar expanded at the bottom of the screen: Annotate, Queue with 2, Comments with 2, Settings and Close, over a screen with two blue task markers and an orange note marker"> | <img src="https://raw.githubusercontent.com/joinearlybird/annokit/main/docs/media/aim-selected.png" width="180" alt="The Welcome to Expo title outlined and labelled ThemedText · themed-text.tsx:11, with an Annotate chip below it and the Element chip at the top of the screen"> | <img src="https://raw.githubusercontent.com/joinearlybird/annokit/main/docs/media/composer-destinations.png" width="180" alt="The composer sheet naming ThemedText · themed-text.tsx:11, the request Make this say Ship it, attach and screenshot controls, a Fable 5.1 agent pill, and Comment and Create Agent Task buttons"> | <img src="https://raw.githubusercontent.com/joinearlybird/annokit/main/docs/media/markers.png" width="180" alt="Blue numbered agent-task markers on the title and the Get started label, and an orange team-note marker on the hints card"> |
+| <img src="https://raw.githubusercontent.com/joinearlybird/annokit/main/docs/media/toolbar.png" width="180" alt="The toolbar expanded at the bottom of the screen: Annotate, Queue with 2, Comments with 2, Settings and Close, over a screen with two blue task markers and an orange note marker"> | <img src="https://raw.githubusercontent.com/joinearlybird/annokit/main/docs/media/aim.gif" width="180" alt="Arming the overlay, tapping the Welcome to Expo title to outline and name it as ThemedText · themed-text.tsx:11, holding to pin a spot on it, dragging a dashed Area rectangle around the Get started card, then in Draw mode a red pen line under the title and an arrow from the card up to it, with Element, Area and Draw on the chip at the top"> | <img src="https://raw.githubusercontent.com/joinearlybird/annokit/main/docs/media/composer-destinations.png" width="180" alt="The composer sheet naming ThemedText · themed-text.tsx:11, the request Make this say Ship it, attach and screenshot controls, a Fable 5.1 agent pill, and Comment and Create Agent Task buttons"> | <img src="https://raw.githubusercontent.com/joinearlybird/annokit/main/docs/media/markers.png" width="180" alt="Blue numbered agent-task markers on the title and the Get started label, and an orange team-note marker on the hints card"> |
 | **Toolbar** | **Aim** | **Compose** | **Markers** |
 | <img src="https://raw.githubusercontent.com/joinearlybird/annokit/main/docs/media/queue.png" width="180" alt="The queue with Queue 2 and Done tabs: two tasks, each with a checkbox and a delete cross, and a Send all button"> | <img src="https://raw.githubusercontent.com/joinearlybird/annokit/main/docs/media/notes.png" width="180" alt="Team notes grouped by screen: Home (this screen) with Sam's note and 3 replies, then /explore with one note, each marked Open"> | <img src="https://raw.githubusercontent.com/joinearlybird/annokit/main/docs/media/task-detail.png" width="180" alt="An agent task's detail: the request Make this say Ship it under a Reopened chip, the run line Claude Code, high, Done, 1 file, 25s, the agent's reply naming the line it changed in src/app/index.tsx, a follow-up asking for an exclamation mark, and a Send refinement to agent button"> | <img src="https://raw.githubusercontent.com/joinearlybird/annokit/main/docs/media/note-detail.png" width="180" alt="A team note's detail, expanded: a four-message discussion between You, Dana and Ada, an Agent task chip on Dana's last message, a Tasks (1) tab, and Resolve and Create agent task buttons"> |
 | **Queue** | **Team notes** | **Task detail** | **Note detail** |
@@ -279,8 +279,11 @@ off and everything else works:
   "routeName": "/home",                 // optional
   "x": 120, "y": 340,                   // tap point, window coordinates
   "boundingBox": { "x": 52, "y": 179.7, "width": 62, "height": 17 },
+  "shape": "point",                     // optional: "point" (a held spot), "area" (a drawn rectangle), "sketch"; absent = the element
+  "sketch": { "strokes": [ { "tool": "pen", "points": [ { "x": 120, "y": 340 }, … ] } ] },  // with shape "sketch": the drawing, as vectors
   "scroll": { "offsetY": 480 },         // offset of the owning scroll container
   "nearbyText": "Get started",          // optional, from Standard detail up
+  "device": { "platform": "ios", "osVersion": "26.0", "window": { "width": 402, "height": 874 }, "pixelRatio": 3, "fontScale": 1, "colorScheme": "dark", "orientation": "portrait" }, // optional, from Standard detail up
   "references": [                       // optional; omitted when nothing is attached
     { "type": "asset", "value": "/api/assets/brand/logo.png", "label": "logo.png" }
   ]
@@ -289,7 +292,7 @@ off and everything else works:
 
 Every field beyond `id`, `comment` and `kind` is context for the agent, so
 store what you receive. The spec covers the shapes a capture can have
-(`shape`, `sketch`, `elements[]`),
+(`shape`, `sketch`, `elements[]`), the `device` the capture was made on,
 Full-detail fields and tasks created from a team note.
 
 ### What the server sends back
@@ -300,9 +303,11 @@ A **stored annotation** is the body above plus the fields the server owns:
 {
   "id": "3f1c…", "comment": "Make this button green", /* …the captured fields… */
   "status": "pending",                  // pending | working | anything else (finished)
+  "awaitingReply": true,                // optional: the agent stopped to ask something and waits (see the rules below)
   "thread": [
     { "id": "m1", "content": "Done: it now uses the brand green.", "role": "agent", "timestamp": "2026-10-26T18:40:00.000Z" },
-    { "id": "m2", "content": "A little darker?", "role": "user", "timestamp": "2026-10-26T18:42:10.000Z" }
+    { "id": "m2", "content": "A little darker?", "role": "user", "timestamp": "2026-10-26T18:42:10.000Z" },
+    { "id": "m3", "content": "Darker than the header, or than the card?", "role": "agent", "kind": "question", "timestamp": "…" }  // kind: the agent is asking
   ]
 }
 ```
@@ -333,6 +338,13 @@ A **comment** (team note) is:
 - **A user reply reopens the task.** Set it back to `pending`. A reply that
   arrives while the task is `working` should reopen it when the run ends.
   An agent reply must not reopen it.
+- **The agent can ask.** A server that runs agents may let one stop and ask
+  instead of guessing: tell it to make no edits and end with a last line
+  `Question: <one sentence>`, then store that reply with `kind: "question"`
+  and set `awaitingReply: true` on the task. The overlay shows a banner, a
+  "?" on the marker and **Needs your answer** on the task; the user's reply
+  clears the flag, reopens the task, and is sent on in one tap. No new
+  `status` value is involved.
 - **The server owns identity and security.** It resolves authors, ignores
   `authorName` once it authenticates callers, authorizes every request, and
   bounds every input. See the
@@ -366,8 +378,16 @@ so in that mode screenshots, attachments and team notes are off.
 - **Team notes, not just agent tasks.** The same capture can go to your
   teammates instead: a signed discussion pinned to the element, which can be
   resolved, and whose messages can be turned into an agent task later.
-- **Pictures.** A screenshot of what you saw, an image pasted from the
-  clipboard, or a file from the app's own assets, attached to the task.
+- **Spots, areas and sketches.** Hold to pin an exact spot, draw a
+  rectangle, or sketch over the screen with a pen or an arrow; the task
+  says which (`shape`), and a drawing travels as vectors and is drawn again
+  over the app when the task is opened.
+- **Pictures.** A screenshot of what you saw, at one pixel per point with
+  the overlay's own chrome hidden and the task's numbered badge, outline and
+  strokes drawn in; an image pasted from the clipboard; or a file from the
+  app's own assets, attached to the task. Every task also carries the device
+  it was made on: platform, OS, window size, pixel ratio, font scale, colour
+  scheme.
 - **A server that runs the agent.** With `agentation-mcp`, an agent session
   you keep open watches for annotations. `npx annokit server` starts the
   agent itself for each task you send: Claude Code, Codex, Cursor, OpenCode,
@@ -375,7 +395,9 @@ so in that mode screenshots, attachments and team notes are off.
   is recorded under the queue's Done tab, where **Undo** asks the agent to
   take a task's change back (and **Redo** queues it again), a reply
   continues the same agent session, and `--worktree` gives every task its own branch, or a pull
-  request with `--pr`.
+  request with `--pr`. The agent is handed the screenshot as a file, with
+  the task's box and the device, and can stop to ask you something instead
+  of guessing; your answer sends the task on.
 - **A versioned protocol.** `GET /health` reports a `protocolVersion`, and a
   client that does not match turns itself off with a warning instead of
   misreading a server.

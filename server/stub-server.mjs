@@ -476,6 +476,9 @@ const FINISH = [
   "asked and nothing else. Metro is watching, so the app reloads by itself.",
   "Finish with one short sentence saying what you changed, then a last line",
   "`Title: <3 to 6 words naming the change>` (e.g. `Title: Darker primary button`).",
+  "If you need to ask the developer something before changing anything, make NO",
+  "edits and end with a last line `Question: <one sentence>` instead of the Title",
+  "line; they answer on the device and the task comes back to you.",
 ];
 
 /**
@@ -486,10 +489,11 @@ const FINISH = [
 function followUpPrompt(a) {
   const thread = (a.thread ?? []).filter((m) => m.id !== a.placeholderId && m.content);
   const lastAgent = thread.map((m) => m.role).lastIndexOf("agent");
+  const asked = lastAgent >= 0 && thread[lastAgent].kind === "question";
   const said = thread.slice(lastAgent + 1).filter((m) => m.role === "user").map((m) => m.content);
   const shot = storedScreenshot(a);
   return [
-    said.length ? "They replied about the change you just made:" : "They sent this task to you again.",
+    said.length ? (asked ? "They answered your question:" : "They replied about the change you just made:") : "They sent this task to you again.",
     ...said.map((c) => `  ${c}`),
     ...(shot?.path ? ["", `SCREENSHOT (from the original request): ${shot.path}`] : []),
     "",
@@ -497,6 +501,7 @@ function followUpPrompt(a) {
   ].join("\n");
 }
 
+/**
 /**
  * What the capture was ABOUT, when it was not simply the element: a held
  * spot (the point matters, the component is context), or a region (the
@@ -644,10 +649,10 @@ function sessionFor(annotation, agent, model, inWorktree) {
  * `timestamp` — because the overlay drops a message without a string
  * `content`.
  */
-function addThreadMessage(id, role, text) {
+function addThreadMessage(id, role, text, extra = {}) {
   const a = db.annotations.get(id);
   if (!a) return null;
-  const message = { id: randomUUID(), role, content: clampText(text), timestamp: now() };
+  const message = { id: randomUUID(), role, content: clampText(text), timestamp: now(), ...extra };
   a.thread = [...(a.thread ?? []), message];
   emitAnnotation("annotation.updated", a);
   return message.id;
@@ -704,14 +709,35 @@ function startNextAgent() {
  * run's title, which names the task in the app's Done list. An agent that
  * leaves it out loses nothing — the list falls back to the request.
  */
-function takeTitle(text) {
+function takeTrailer(text, word) {
   const lines = text.split("\n");
   let i = lines.length - 1;
   while (i >= 0 && !lines[i].trim()) i--;
-  const m = i >= 0 ? /^\W*title\W*:\s*(.+?)\W*$/i.exec(lines[i].trim()) : null;
-  if (!m) return { reply: text, title: undefined };
-  return { reply: lines.slice(0, i).join("\n").trim(), title: m[1].replace(/[`*_]/g, "").trim().slice(0, 60) || undefined };
+  // Trailing markdown goes; trailing punctuation goes from a title, never
+  // from a question — its question mark is part of it.
+  const m = i >= 0 ? new RegExp(`^\\W*${word}\\W*:\\s*(.+?)[\\s\`*_]*$`, "i").exec(lines[i].trim()) : null;
+  if (!m) return { reply: text, value: undefined };
+  const value = m[1].replace(/[`*_]/g, "").trim().replace(word === "title" ? /[\W_]+$/ : /^$/, "");
+  return { reply: lines.slice(0, i).join("\n").trim(), value: value || undefined };
 }
+
+/**
+ * The trailing lines an agent is asked to end with: `Title: …` names the
+ * change; `Question: …` means it stopped to ask instead (docs/protocol.md,
+ * "Questions"). Either order, each at most once; only the LAST non-blank
+ * lines count, so a "Question:" heading mid-reply is just prose.
+ */
+function takeTrailers(text) {
+  let reply = text, title, question;
+  for (let n = 0; n < 2; n++) {
+    const t = takeTrailer(reply, "title");
+    if (t.value && !title) { title = t.value.slice(0, 60); reply = t.reply; }
+    const q = takeTrailer(reply, "question");
+    if (q.value && !question) { question = q.value.slice(0, 300); reply = q.reply; }
+  }
+  return { reply, title, question };
+}
+const takeTitle = (text) => { const { reply, title } = takeTrailers(text); return { reply, title }; };
 
 function runAgent(id, done, origin = `http://localhost:${PORT}`) {
   const annotation = db.annotations.get(id);
@@ -786,7 +812,7 @@ function runAgent(id, done, origin = `http://localhost:${PORT}`) {
       let reply;
       // For the run's record: what it changed, and its own one-line account.
       let files = [];
-      let summary, title;
+      let summary, title, question;
       if (err) {
         // Say what went wrong in the app. A silent failure here looks
         // exactly like an agent that decided to do nothing.
@@ -795,9 +821,13 @@ function runAgent(id, done, origin = `http://localhost:${PORT}`) {
           : `${agent.label} could not run: ${String(stderr || err.message).trim().split("\n")[0]}`;
         console.log(`    ✗ ${agent.label} failed on ${id.slice(0, 8)}: ${reply}`);
       } else {
-        ({ reply, title } = takeTitle(agent.read(stdout).trim()));
+        ({ reply, title, question } = takeTrailers(agent.read(stdout).trim()));
+        // The agent stopped to ask: the question is the reply's point and
+        // the run's summary, and the task waits for the answer (below).
+        if (question && undoing) question = undefined;
+        if (question) reply = [reply, question].filter(Boolean).join("\n\n");
         reply ||= "Done.";
-        summary = reply.split("\n").find((l) => l.trim())?.trim().slice(0, 200);
+        summary = question ?? reply.split("\n").find((l) => l.trim())?.trim().slice(0, 200);
         console.log(`    ✓ ${agent.label} finished ${id.slice(0, 8)}`);
         if (wt) {
           // The work is on a branch, not in front of you — so the reply has
@@ -877,6 +907,12 @@ function runAgent(id, done, origin = `http://localhost:${PORT}`) {
         delete a.placeholderId;
         delete a.refinedDuringRun;
         delete a.progress;
+        // AWAITING A REPLY (docs/protocol.md, "Questions"): set before the
+        // message below goes out, so the event's re-read sees both. The
+        // next human reply clears it. Not a status: the task is finished
+        // as far as every `pending` filter is concerned.
+        if (question && !err) a.awaitingReply = true;
+        else delete a.awaitingReply;
       }
       Object.assign(run, {
         finishedAt: new Date().toISOString(),
@@ -884,8 +920,9 @@ function runAgent(id, done, origin = `http://localhost:${PORT}`) {
         ...(files.length ? { files: files.map((path) => ({ path })) } : {}),
         ...(err ? { error: reply.slice(0, 300) } : summary ? { summary } : {}),
         ...(title ? { title } : {}),
+        ...(question && !err ? { asked: true } : {}),
       });
-      addThreadMessage(id, "agent", reply);
+      addThreadMessage(id, "agent", reply, question && !err ? { kind: "question" } : {});
       // The checkout is disposable; the BRANCH is the artifact and stays.
       if (wt) git(["worktree", "remove", "--force", wt.dir], repoRoot());
       // Whatever happened, the next one may start — a failed run must not
@@ -1011,7 +1048,7 @@ function reopen(a) {
 const SERVER_OWNED = [
   "sessionId", "createdAt", "updatedAt", "sentAt", "run", "progress", "reopenedAt", "reopenCount",
   "placeholderId", "refinedDuringRun", "resolvedAt", "runs", "agentSession",
-  "undoRequested", "undoneAt", "redoRequestedAt",
+  "undoRequested", "undoneAt", "redoRequestedAt", "awaitingReply",
 ];
 
 /** One reference as the protocol has it — strings only, bounded — or null. */
@@ -1593,6 +1630,8 @@ async function handle(req, res) {
       // only ever come from the bridge itself.
       annotation.thread = [...(annotation.thread ?? []),
         { id: randomUUID(), role: "user", content: clampText(body.content), timestamp: now() }];
+      // The reply is the answer the agent was waiting for, if it was.
+      delete annotation.awaitingReply;
       // A human reply puts the task back in the queue — "reply to refine".
       // Mid-run it cannot: the run would overwrite the status when it ends,
       // so it is marked and the run reopens the task as it finishes.
@@ -1607,6 +1646,7 @@ async function handle(req, res) {
     if (seg[2] === "undo" && req.method === "POST") {
       if (!annotation) return json(res, 404, { error: "no such annotation" });
       if (!UNDO) return json(res, 409, { error: WORKTREE ? "in worktree mode the change is on its branch: delete the branch to undo it" : "this server runs no agent" });
+      if (annotation.awaitingReply) return json(res, 409, { error: "the agent asked a question; answer it first" });
       if (annotation.status === "pending" || annotation.status === "working" || annotation.undoRequested) {
         return json(res, 409, { error: "only a finished task can be undone" });
       }

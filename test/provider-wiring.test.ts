@@ -35,6 +35,16 @@ describe("headless screenshots", () => {
   });
 });
 
+describe("the agent's questions", () => {
+  it("reads the session on every refresh, and feeds the asking tasks to the markers and the banner", () => {
+    expect(source).toContain("setAsking(askingTasks(all));");
+    expect(source).not.toContain("if (!hasNotesRef.current || serverFlavor()");
+    expect(source).toContain("annotations={markerTasks}");
+    expect(source).toMatch(/asks\.count > 0 && agentWork\.count === 0 && !armed && !capture && !shooting/);
+    expect(source).toContain("<AnnoKitAskBanner");
+  });
+});
+
 describe("what a screenshot shows", () => {
   const line = (needle: string) => {
     const at = source.indexOf(needle);

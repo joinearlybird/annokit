@@ -108,6 +108,17 @@ describe("a Done row", () => {
   });
 });
 
+describe("a task the agent is asking about", () => {
+  it("says Needs your answer in Done, in the busy tone, and offers no Undo until answered", () => {
+    const run = { ...RUN, outcome: "done" as const };
+    const asking = { id: "a", comment: "make one bigger", status: "sent", awaitingReply: true, runs: [run] };
+    expect(doneRow(asking)).toMatchObject({ how: "Needs your answer", tone: "busy" });
+    expect(doneRow({ id: "b", comment: "x", status: "sent", awaitingReply: true }).how).toBe("Needs your answer");
+    expect(taskUndoAction(asking, true)).toBeNull();
+    expect(taskUndoAction({ ...asking, awaitingReply: undefined }, true)?.kind).toBe("undo");
+  });
+});
+
 describe("the agent's title", () => {
   it("names the task in Done, with the request under it", () => {
     const titled = { ...RUN, title: "Darker primary button" };

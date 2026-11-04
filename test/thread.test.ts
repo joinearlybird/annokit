@@ -258,6 +258,14 @@ describe("fetchAnnotation — the WHOLE annotation, and whether it still exists"
   });
 });
 
+describe("a question in the thread", () => {
+  it("keeps the server's kind on an agent message", async () => {
+    const t = transport({ get: () => ({ id: "a1", thread: [{ id: "m1", role: "agent", content: "Which one?", kind: "question" }] }) });
+    const thread = await fetchThread(t, "a1");
+    expect(thread?.[0]?.kind).toBe("question");
+  });
+});
+
 describe("annotationThread", () => {
   it("is the annotation's messages", () => {
     expect(annotationThread({ id: "a1", thread: [USER, AGENT] })).toEqual([USER, AGENT]);

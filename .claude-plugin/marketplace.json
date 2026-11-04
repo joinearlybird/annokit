@@ -11,7 +11,7 @@
     {
       "name": "annokit",
       "source": "./",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "category": "development",
       "description": "The annokit-setup skill: add AnnoKit to an Expo or bare React Native app and start the stub server that hands tasks to your coding agent.",
       "keywords": [
