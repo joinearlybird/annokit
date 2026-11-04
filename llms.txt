@@ -1,0 +1,34 @@
+# AnnoKit
+
+> AnnoKit is a development-only annotation overlay for React Native and Expo apps. Tap any element in the running app and it lights up with its real component name and source location; write what should change and send it as an agent task to a coding agent, or as a team note to your teammates. Everything travels over the AnnoKit Protocol, a small versioned HTTP contract any server can implement; `npx annokit server` ships a stub that implements it in memory and hands each task to Claude Code, Codex, Cursor, OpenCode, Gemini CLI or Grok running headless in your project, so the edit hot-reloads onto the device that asked for it. The package is inert outside `__DEV__`, has zero runtime dependencies, and every native integration is an optional peer. MIT licensed.
+
+Package: `@joinearlybird/annokit` on npm. Repository: https://github.com/joinearlybird/annokit
+
+## Docs
+
+- [README](https://github.com/joinearlybird/annokit/blob/main/README.md): features, quick start, configuration, writing a server, security
+- [How it works](https://github.com/joinearlybird/annokit/blob/main/docs/how-it-works.md): the design, surface by surface
+- [Configuration](https://github.com/joinearlybird/annokit/blob/main/docs/configuration.md): every prop and the optional peer dependencies
+- [Settings](https://github.com/joinearlybird/annokit/blob/main/docs/settings.md): the in-app panel, theme, marker colours, Output Detail
+- [AnnoKit Protocol v1](https://github.com/joinearlybird/annokit/blob/main/docs/protocol.md): the HTTP contract, routes, bodies and server obligations
+- [Security and privacy](https://github.com/joinearlybird/annokit/blob/main/docs/security-and-privacy.md)
+- [Headless capture](https://github.com/joinearlybird/annokit/blob/main/docs/headless-capture.md): your own UI over the capture engine
+- [UI overrides](https://github.com/joinearlybird/annokit/blob/main/docs/ui-overrides.md): replace the composer or the detail panes
+- [Extending attachments](https://github.com/joinearlybird/annokit/blob/main/docs/extending-attachments.md): custom reference sources
+- [Assets](https://github.com/joinearlybird/annokit/blob/main/docs/assets.md): the asset library the composer attaches from
+- [Development](https://github.com/joinearlybird/annokit/blob/main/docs/development.md): working on the package, releases
+
+## Skills
+
+- [annokit-setup](https://github.com/joinearlybird/annokit/blob/main/skills/annokit-setup/SKILL.md): for a coding agent: add AnnoKit to an Expo or bare React Native app, point it at a server, start the stub
+
+## Examples
+
+- [Examples guide](https://github.com/joinearlybird/annokit/blob/main/examples/README.md): running the examples, agent mode, worktrees and pull requests, your own agent
+- [Expo example](https://github.com/joinearlybird/annokit/tree/main/examples/expo)
+- [Bare React Native example](https://github.com/joinearlybird/annokit/tree/main/examples/bare-react-native)
+
+## Optional
+
+- [Security policy](https://github.com/joinearlybird/annokit/blob/main/SECURITY.md)
+- [Stub server source](https://github.com/joinearlybird/annokit/blob/main/server/stub-server.mjs): every protocol route in one file

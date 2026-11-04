@@ -1,0 +1,26 @@
+{
+  "name": "annokit",
+  "owner": {
+    "name": "Earlybird",
+    "url": "https://github.com/joinearlybird"
+  },
+  "metadata": {
+    "description": "AnnoKit: tap an element in your React Native app, say what should change, and send it to your coding agent or your team."
+  },
+  "plugins": [
+    {
+      "name": "annokit",
+      "source": "./",
+      "version": "0.2.0",
+      "category": "development",
+      "description": "The annokit-setup skill: add AnnoKit to an Expo or bare React Native app and start the stub server that hands tasks to your coding agent.",
+      "keywords": [
+        "annokit",
+        "react-native",
+        "expo",
+        "annotation",
+        "coding-agent"
+      ]
+    }
+  ]
+}

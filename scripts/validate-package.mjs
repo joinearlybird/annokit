@@ -80,6 +80,10 @@ if (!files.includes("LICENSE")) fail("tarball has no LICENSE");
 if (has(/^test\//)) fail("tarball contains test/");
 if (has(/\.test\.[jt]sx?$/)) fail("tarball contains test files");
 if (has(/^docs\//)) fail("tarball contains docs/ — README links are absolute, so this is dead weight");
+// The Claude Code plugin and llms.txt describe the repository, not the
+// package: they are read from GitHub and would be dead weight in the tarball.
+if (has(/^\.claude-plugin\//)) fail("tarball contains .claude-plugin/");
+if (files.includes("llms.txt")) fail("tarball contains llms.txt");
 
 // ── The bin: `npx annokit server` is the quick start's second step ─────────
 for (const [name, target] of Object.entries(pkg.bin ?? {})) {

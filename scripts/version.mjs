@@ -1,11 +1,13 @@
 /**
- * The package version, which lives in three places that must agree:
- * `version` in package.json, the root entries of package-lock.json, and
+ * The package version, which lives in five places that must agree:
+ * `version` in package.json, the root entries of package-lock.json,
  * PACKAGE_VERSION in src/env.ts (a literal on purpose — src/env.ts explains
- * why it does not import the manifest).
+ * why it does not import the manifest), and the Claude Code plugin manifests
+ * in .claude-plugin/ (plugin.json and the marketplace's entry for it), which
+ * are not in the npm tarball but describe the same release.
  *
  *   node scripts/version.mjs bump <patch|minor|major|X.Y.Z>
- *     Sets all three. `npm run bump patch` in a pull request is the whole
+ *     Sets all five. `npm run bump patch` in a pull request is the whole
  *     release: merging it publishes (.github/workflows/release.yml).
  *
  *   node scripts/version.mjs gate <base-ref>
@@ -65,7 +67,15 @@ function bump(step) {
   if (!literal.test(env)) throw new Error("PACKAGE_VERSION not found in src/env.ts");
   writeFileSync("src/env.ts", env.replace(literal, `export const PACKAGE_VERSION = "${version}";`));
 
-  console.log(`✓ ${manifest.name} ${version} (package.json, package-lock.json, src/env.ts)`);
+  const plugin = readJson(".claude-plugin/plugin.json");
+  plugin.version = version;
+  writeJson(".claude-plugin/plugin.json", plugin);
+
+  const marketplace = readJson(".claude-plugin/marketplace.json");
+  for (const entry of marketplace.plugins ?? []) if (entry.name === plugin.name) entry.version = version;
+  writeJson(".claude-plugin/marketplace.json", marketplace);
+
+  console.log(`✓ ${manifest.name} ${version} (package.json, package-lock.json, src/env.ts, .claude-plugin/*.json)`);
 }
 
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" });

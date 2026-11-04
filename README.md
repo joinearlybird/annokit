@@ -70,6 +70,18 @@ and other agents, and follows the steps below:
 npx skills add joinearlybird/annokit --skill annokit-setup
 ```
 
+In Claude Code the same skill comes as a plugin, with `/annokit:annokit-setup`
+to run it:
+
+```
+/plugin install annokit --marketplace joinearlybird/annokit
+```
+
+(Before Claude Code 2.1.275: `/plugin marketplace add joinearlybird/annokit`,
+then `/plugin install annokit@annokit`.) Agents that read
+[`llms.txt`](https://github.com/joinearlybird/annokit/blob/main/llms.txt)
+find the documentation from there.
+
 **1. Install.** In a new Expo app:
 
 ```bash
