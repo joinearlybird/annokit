@@ -118,6 +118,24 @@ edits the file, Metro reloads, and the change appears on the device that
 asked for it. What the agent says comes back as a reply in the task's
 thread, so the answer arrives where the request came from.
 
+**What the agent is given.** The prompt names the component, its source
+line, the text on it, the box and tap point in window coordinates, the
+device the capture was made on, and — when you attached a screenshot —
+the path of a copy the stub keeps under the system temp directory
+(`annokit-<port>/screenshots/`, wiped when the stub exits). Claude Code
+opens it with its Read tool and Codex is handed it with `-i`; a custom
+`AGENT_CMD` gets the path in the prompt. The shot is one pixel per point
+with the task's numbered badge drawn in, so "the box at (52, 180)" can be
+looked at rather than counted.
+
+**The agent can ask.** The prompt's closing paragraph says that, if it
+needs to ask you something before changing anything, it should make no
+edits and end with a last line `Question: <one sentence>`. The stub reads
+that line, the task shows **Needs your answer** with a banner and a "?"
+on its marker, and your reply plus one tap sends the task on in the same
+agent session. A custom agent gets the same convention in its prompt and
+only has to end its output with that line.
+
 ### Agent edits land in your working tree
 
 That is the point — Metro reloads them — but it means a test run leaves
@@ -270,9 +288,12 @@ That is the whole argument for sending the on-screen text by default
 
 1. Tap the floating pencil — that arms annotate mode.
 2. Touch any element. It outlines and names the nearest **user** component
-   (`ThemedText`, not `Text`), with its file and line.
+   (`ThemedText`, not `Text`), with its file and line. Hold still to pin an
+   exact spot instead, or use the chip at the top to switch to **Area** (a
+   rectangle) or **Draw** (a pen or an arrow over the screen).
 3. Write a sentence, then pick the commit that names the destination:
    **Create Agent Task** or **Comment**. The tap that chooses is the tap that
-   sends.
+   sends. Tap the camera first if the agent should see the screen.
 4. The mark stays on the element. Tap it to reply, resolve or delete.
-5. Watch the server log — every step is one small HTTP call.
+5. Watch the server log — every step is one small HTTP call, and a sent
+   task's prompt names the screenshot file the agent was given.
